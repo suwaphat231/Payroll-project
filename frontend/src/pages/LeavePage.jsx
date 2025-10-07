@@ -120,9 +120,7 @@ export default function LeavePage({
         await onSubmit(payload, form.attachment);
       } else {
         // Demo behavior
-        alert("ส่งคำขอลาสำเร็จ
-
-" + JSON.stringify(payload, null, 2));
+        alert("ส่งคำขอลาสำเร็จ" + JSON.stringify(payload, null, 2));
       }
     } catch (err) {
       console.error(err);
