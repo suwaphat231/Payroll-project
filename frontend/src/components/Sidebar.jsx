@@ -5,13 +5,16 @@ export default function Sidebar() {
   const { role } = useAuth();
   const { pathname } = useLocation();
 
+  const r = (role || "").toLowerCase();
+
   const menu = [
-    { path: "/", label: "Dashboard", allow: ["HR", "Accounting", "Employee"] },
-    { path: "/employees", label: "Employees", allow: ["HR"] },
-    { path: "/payroll", label: "Payroll", allow: ["HR", "Accounting"] },
-    { path: "/payslips", label: "Payslips", allow: ["Employee", "HR"] },
-    { path: "/leaves", label: "Leave", allow: ["Employee", "HR"] },
-    { path: "/reports", label: "Reports", allow: ["Accounting", "HR"] },
+    { path: "/dashboard", label: "Dashboard", allowed: ["hr", "accounting", "employee", "admin"] },
+    { path: "/employees", label: "Employees", allowed: ["hr", "admin"] },
+    { path: "/payroll", label: "Payroll", allowed: ["hr", "accounting", "admin"] },
+    { path: "/payslips", label: "Payslips", allowed: ["employee", "hr", "admin"] },
+    { path: "/leave", label: "Leave", allowed: ["employee", "hr", "admin"] },
+    { path: "/reports", label: "Reports", allowed: ["accounting", "hr", "admin"] },
+    { path: "/settings", label: "Settings", allowed: ["admin"] },
   ];
 
   return (
@@ -19,7 +22,7 @@ export default function Sidebar() {
       <h2 className="text-lg font-semibold text-viridian-700 mb-6">Menu</h2>
       <ul className="space-y-2">
         {menu
-          .filter((m) => m.allow.includes(role))
+          .filter((m) => m.allowed.includes(r))
           .map((m) => (
             <li key={m.path}>
               <Link
