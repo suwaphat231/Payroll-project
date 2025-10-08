@@ -1,84 +1,100 @@
 package main
 
-import ( "log" "net/http" "os"
+import (
+	"log"
+	"net/http"
+	"os"
 
-"backend/internal/db"
-"backend/internal/handlers"
-"backend/internal/middleware"
-"backend/internal/models"
-"github.com/gin-gonic/gin"
-"gorm.io/gorm"
+	"backend/internal/db"
+	"backend/internal/handlers"
+	"backend/internal/middleware"
+	"backend/internal/models"
 
-Copy
-
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
-func main() { dsn := getenv("DATABASE_URL", 
-"postgres://postgres:postgres@localhost:5432/payroll?sslmode=disable") 
-port := getenv("PORT", "3000") jwtSecret := getenv("JWT_SECRET", "dev_secret")
+func main() {
+	dsn := getenv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/payroll?sslmode=disable")
+	port := getenv("PORT", "3000")
+	jwtSecret := getenv("JWT_SECRET", "dev_secret")
 
-gdb, err := db.Connect(dsn)
-if err != nil {
-	log.Fatal(err)
+	gdb, err := db.Connect(dsn)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := migrate(gdb); err != nil {
+		log.Fatal(err)
+	}
+
+	middleware.SetJWTSecret(jwtSecret)
+
+	r := gin.Default()
+	enableCORS(r)
+
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"ok": true})
+	})
+
+	empH := handlers.NewEmployeeHandler(gdb)
+	payH := handlers.NewPayrollHandler(gdb)
+	psH := handlers.NewPayslipHandler(gdb)
+	lvH := handlers.NewLeaveHandler(gdb)
+
+	api := r.Group("/api")
+	{
+		api.POST("/auth/login", payH.Login)
+
+		secured := api.Group("/")
+		secured.Use(middleware.AuthRequired())
+
+		secured.GET("/employees", empH.List)
+		secured.POST("/employees", empH.Create)
+
+		secured.POST("/payroll/runs", payH.CreateRun)
+		secured.POST("/payroll/runs/:id/calculate", payH.CalculateRun)
+		secured.GET("/payroll/runs/:id/items", payH.ListRunItems)
+		secured.POST("/payroll/runs/:id/export-bank-csv", payH.ExportBankCSV)
+
+		secured.GET("/payslips/:runId", psH.ListByRun)
+
+		secured.GET("/leave", lvH.List)
+		secured.POST("/leave", lvH.Create)
+	}
+
+	log.Printf("Listening on :%s", port)
+	if err := r.Run(":" + port); err != nil {
+		log.Fatal(err)
+	}
 }
 
-if err := migrate(gdb); err != nil {
-	log.Fatal(err)
+func getenv(k, def string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
+	}
+	return def
 }
 
-middleware.SetJWTSecret(jwtSecret)
-
-r := gin.Default()
-enableCORS(r)
-
-r.GET("/health", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"ok": true}) })
-
-empH := handlers.NewEmployeeHandler(gdb)
-payH := handlers.NewPayrollHandler(gdb)
-psH := handlers.NewPayslipHandler(gdb)
-lvH := handlers.NewLeaveHandler(gdb)
-
-api := r.Group("/api")
-{
-	api.POST("/auth/login", payH.Login)
-
-	secured := api.Group("/")
-	secured.Use(middleware.AuthRequired())
-
-	secured.GET("/employees", empH.List)
-	secured.POST("/employees", empH.Create)
-
-	secured.POST("/payroll/runs", payH.CreateRun)
-	secured.POST("/payroll/runs/:id/calculate", payH.CalculateRun)
-	secured.GET("/payroll/runs/:id/items", payH.ListRunItems)
-	secured.POST("/payroll/runs/:id/export-bank-csv", payH.ExportBankCSV)
-
-	secured.GET("/payslips/:runId", psH.ListByRun)
-
-	secured.GET("/leave", lvH.List)
-	secured.POST("/leave", lvH.Create)
+func migrate(db *gorm.DB) error {
+	return db.AutoMigrate(
+		&models.Employee{},
+		&models.Employment{},  // ถ้าไม่มี struct นี้ใน models ให้ลบบรรทัดนี้ออก
+		&models.PayrollRun{},
+		&models.PayrollItem{}, // ถ้าไม่มี struct นี้ใน models ให้ลบบรรทัดนี้ออก
+		&models.Leave{},
+	)
 }
 
-log.Printf("listening on :%s", port)
-if err := r.Run(":" + port); err != nil {
-	log.Fatal(err)
+func enableCORS(r *gin.Engine) {
+	r.Use(func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(204)
+			return
+		}
+		c.Next()
+	})
 }
-
-Copy
-
-}
-
-func getenv(k, def string) string { if v := os.Getenv(k);
-     v != "" { return v } return def }
-
-func migrate(db *gorm.DB) error { return db.AutoMigrate( &models.Employee{}, 
-                                                        &models.Employment{},
-                                                        &models.PayrollRun{}, 
-                                                        &models.PayrollItem{}, 
-                                                        &models.Leave{}, ) }
-
-func enableCORS(r *gin.Engine) { r.Use(func(c gin.Context) 
-                                { c.Writer.Header().Set("Access-Control-Allow-Origin", "") c.Writer.Header().Set("Access-Control-Allow-Methods", 
-                                "GET,POST,PUT,PATCH,DELETE,OPTIONS") c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization") 
-                                if c.Request.Method == http.MethodOptions 
-                                { c.AbortWithStatus(204) return } c.Next() }) }

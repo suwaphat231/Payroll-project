@@ -1,12 +1,45 @@
-version: "3.9"
 services:
   db:
     image: postgres:15-alpine
+    container_name: payroll-db
     environment:
       POSTGRES_DB: payroll
       POSTGRES_USER: payroll_user
       POSTGRES_PASSWORD: secret
-    ports: ["5432:5432"]
-    volumes: [ "pgdata:/var/lib/postgresql/data" ]
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payroll_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ../backend
+    container_name: payroll-backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://payroll_user:secret@db:5432/payroll?sslmode=disable
+      PORT: 3000
+      JWT_SECRET: dev_secret
+    ports:
+      - "3000:3000"
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: payroll-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@payroll.local
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "8080:80"
+    depends_on:
+      - db
+
 volumes:
   pgdata:
