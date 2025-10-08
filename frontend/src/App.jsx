@@ -1,5 +1,7 @@
 // src/App.jsx
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import "./index.css";
+
 
 // 🧩 Layout หลัก + ระบบตรวจสิทธิ์
 import Layout from "./components/Layout";
