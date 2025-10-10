@@ -1,22 +1,19 @@
 package models
 
-import (
-    "time"
-    "gorm.io/gorm"
-)
+import "time"
 
 type Employee struct {
-    gorm.Model
-    Name       string    `json:"name"`
-    Email      string    `json:"email"`
-    Active     bool      `json:"active"`
-    Employment *Employment `json:"employment,omitempty"`
-}
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Code      string    `gorm:"uniqueIndex;size:50;not null" json:"code"`
+	FirstName string    `gorm:"size:100;not null" json:"firstName"`
+	LastName  string    `gorm:"size:100;not null" json:"lastName"`
+	Email     string    `gorm:"size:150" json:"email"`
+	Position  string    `gorm:"size:100" json:"position"`
 
-type Employment struct {
-    ID         uint      `gorm:"primaryKey" json:"id"`
-    EmployeeID uint      `gorm:"index" json:"employeeId"`
-    HireDate   time.Time `json:"hireDate"`
-    EndDate    *time.Time `json:"endDate,omitempty"`
-    BaseSalary float64   `json:"baseSalary"`
+	// ใช้ pointer เพื่อหลีกเลี่ยง recursive type
+	Employment *Employment `json:"employment"` // has-one
+
+	Salary    float64   `json:"salary"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
