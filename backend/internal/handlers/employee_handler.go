@@ -6,24 +6,24 @@ import (
 
 	"backend/internal/models"
 	"backend/internal/repository"
+	"backend/internal/storage"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 type EmployeeHandler struct {
 	Repo *repository.EmployeeRepository
 }
 
-func NewEmployeeHandler(db *gorm.DB) *EmployeeHandler {
-	base := repository.New(db)
+func NewEmployeeHandler(store *storage.Storage) *EmployeeHandler {
+	base := repository.New(store)
 	return &EmployeeHandler{Repo: repository.NewEmployeeRepository(base)}
 }
 
 func (h *EmployeeHandler) List(c *gin.Context) {
 	emps, err := h.Repo.List()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "storage error"})
 		return
 	}
 	c.JSON(http.StatusOK, emps)
@@ -31,11 +31,12 @@ func (h *EmployeeHandler) List(c *gin.Context) {
 
 func (h *EmployeeHandler) Create(c *gin.Context) {
 	var body struct {
-		Code      string  `json:"code"`
-		FirstName string  `json:"firstName"`
-		LastName  string  `json:"lastName"`
+		Code       string  `json:"code"`
+		FirstName  string  `json:"firstName"`
+		LastName   string  `json:"lastName"`
+		Email      string  `json:"email"`
 		BaseSalary float64 `json:"baseSalary"`
-		HireDate  string  `json:"hireDate"`
+		HireDate   string  `json:"hireDate"`
 	}
 
 	if err := c.ShouldBindJSON(&body); err != nil || body.Code == "" || body.FirstName == "" || body.LastName == "" {
@@ -53,6 +54,7 @@ func (h *EmployeeHandler) Create(c *gin.Context) {
 		Code:      body.Code,
 		FirstName: body.FirstName,
 		LastName:  body.LastName,
+		Email:     body.Email,
 		Active:    true,
 		Employment: &models.Employment{
 			HireDate:   hire,
