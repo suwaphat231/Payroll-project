@@ -2,18 +2,19 @@ package models
 
 import "time"
 
+// Employee represents an employee record in the payroll system.
 type Employee struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	Code      string    `gorm:"uniqueIndex;size:50;not null" json:"code"`
-	FirstName string    `gorm:"size:100;not null" json:"firstName"`
-	LastName  string    `gorm:"size:100;not null" json:"lastName"`
-	Email     string    `gorm:"size:150" json:"email"`
-	Position  string    `gorm:"size:100" json:"position"`
+    gorm.Model
+    Name       string    `json:"name"`
+    Email      string    `json:"email"`
+    Active     bool      `json:"active"`
+    Employment *Employment `json:"employment,omitempty"`
+}
 
-	// ใช้ pointer เพื่อหลีกเลี่ยง recursive type
-	Employment *Employment `json:"employment"` // has-one
-
-	Salary    float64   `json:"salary"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+type Employment struct {
+    ID         uint      `gorm:"primaryKey" json:"id"`
+    EmployeeID uint      `gorm:"index" json:"employeeId"`
+    HireDate   time.Time `json:"hireDate"`
+    EndDate    *time.Time `json:"endDate,omitempty"`
+    BaseSalary float64   `json:"baseSalary"`
 }

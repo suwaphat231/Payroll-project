@@ -8,10 +8,9 @@ import (
 	"backend/internal/db"
 	"backend/internal/handlers"
 	"backend/internal/middleware"
-	"backend/internal/models"
+	"backend/internal/storage"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 func main() {
@@ -20,17 +19,12 @@ func main() {
 	port := getenv("PORT", "3000")
 	jwtSecret := getenv("JWT_SECRET", "dev_secret")
 
-	log.Printf("Starting Payroll Backend on port %s", port)
-	log.Printf("Using database: %s", dsn)
-
-	// เชื่อมต่อ DB
-	gdb, err := db.Connect(dsn)
+	store, err := db.Connect(dsn)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// migrate schema (ลำดับให้ Employee มาก่อน Employment)
-	if err := migrate(gdb); err != nil {
+	if err := migrate(store); err != nil {
 		log.Fatal(err)
 	}
 
@@ -46,11 +40,33 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
-	// register routes
-	registerRoutes(r, gdb)
+	empH := handlers.NewEmployeeHandler(store)
+	payH := handlers.NewPayrollHandler(store)
+	psH := handlers.NewPayslipHandler(store)
+	lvH := handlers.NewLeaveHandler(store)
 
-	// run server
-	log.Printf("Server ready at http://localhost:%s", port)
+	api := r.Group("/api")
+	{
+		api.POST("/auth/login", payH.Login)
+
+		secured := api.Group("/")
+		secured.Use(middleware.AuthRequired())
+
+		secured.GET("/employees", empH.List)
+		secured.POST("/employees", empH.Create)
+
+		secured.POST("/payroll/runs", payH.CreateRun)
+		secured.POST("/payroll/runs/:id/calculate", payH.CalculateRun)
+		secured.GET("/payroll/runs/:id/items", payH.ListRunItems)
+		secured.POST("/payroll/runs/:id/export-bank-csv", payH.ExportBankCSV)
+
+		secured.GET("/payslips/:runId", psH.ListByRun)
+
+		secured.GET("/leave", lvH.List)
+		secured.POST("/leave", lvH.Create)
+	}
+
+	log.Printf("Listening on :%s", port)
 	if err := r.Run(":" + port); err != nil {
 		log.Fatal(err)
 	}
@@ -64,15 +80,10 @@ func getenv(k, def string) string {
 	return def
 }
 
-// migrate schema
-func migrate(db *gorm.DB) error {
-	// ลำดับสำคัญ: ตารางที่ถูกอ้างถึงมาก่อน
-	return db.AutoMigrate(
-		&models.Employee{},
-		&models.Employment{},
-		&models.PayrollRun{},
-		&models.PayrollItem{},
-	)
+func migrate(store *storage.Storage) error {
+	// in-memory storage has no schema migration requirement
+	_ = store
+	return nil
 }
 
 // เปิด CORS

@@ -25,8 +25,13 @@ type PayrollItem struct {
 	Details     string    `json:"details"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
+}
 
-	// (แนะนำ) ใส่ relation ย้อนกลับเป็น pointer ป้องกัน recursion ขนาด struct
-	Run      *PayrollRun `gorm:"foreignKey:RunID;references:ID" json:"-"`
-	Employee *Employee   `gorm:"foreignKey:EmployeeID;references:ID" json:"-"`
+type PayrollItem struct {
+	ID         uint    `gorm:"primaryKey" json:"id"`
+	RunID      uint    `gorm:"index" json:"runId"`
+	EmployeeID uint    `gorm:"index" json:"employeeId"`
+	NetPay     float64 `json:"netPay"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 }
