@@ -5,17 +5,17 @@ import (
 	"strconv"
 
 	"backend/internal/repository"
+	"backend/internal/storage"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 type PayslipHandler struct {
 	Repo *repository.PayslipRepository
 }
 
-func NewPayslipHandler(db *gorm.DB) *PayslipHandler {
-	base := repository.New(db)
+func NewPayslipHandler(store *storage.Storage) *PayslipHandler {
+	base := repository.New(store)
 	return &PayslipHandler{Repo: repository.NewPayslipRepository(base)}
 }
 
@@ -24,7 +24,7 @@ func (h *PayslipHandler) ListByRun(c *gin.Context) {
 	runID, _ := strconv.Atoi(c.Param("runId"))
 	items, err := h.Repo.ListByRun(uint(runID))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "storage error"})
 		return
 	}
 	c.JSON(http.StatusOK, items)

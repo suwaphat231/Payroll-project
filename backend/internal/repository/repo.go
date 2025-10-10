@@ -1,14 +1,14 @@
 package repository
 
-import "gorm.io/gorm"
+import "backend/internal/storage"
 
-// Repository เป็น base struct ที่เก็บ instance ของ gorm.DB
-// Repository อื่น ๆ จะฝัง struct นี้เพื่อใช้ DB ได้ทันที
+// Repository เป็น base struct ที่เก็บ instance ของ storage.Storage
+// Repository อื่น ๆ จะฝัง struct นี้เพื่อใช้ storage ได้ทันที
 type Repository struct {
-	DB *gorm.DB
+	Store *storage.Storage
 }
 
-// New สร้าง Repository ใหม่จาก gorm.DB
-func New(db *gorm.DB) *Repository {
-	return &Repository{DB: db}
+// New สร้าง Repository ใหม่จาก storage.Storage
+func New(store *storage.Storage) *Repository {
+	return &Repository{Store: store}
 }

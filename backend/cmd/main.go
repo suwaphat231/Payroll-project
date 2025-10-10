@@ -8,10 +8,9 @@ import (
 	"backend/internal/db"
 	"backend/internal/handlers"
 	"backend/internal/middleware"
-	"backend/internal/models"
+	"backend/internal/storage"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 func main() {
@@ -19,12 +18,12 @@ func main() {
 	port := getenv("PORT", "3000")
 	jwtSecret := getenv("JWT_SECRET", "dev_secret")
 
-	gdb, err := db.Connect(dsn)
+	store, err := db.Connect(dsn)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	if err := migrate(gdb); err != nil {
+	if err := migrate(store); err != nil {
 		log.Fatal(err)
 	}
 
@@ -37,10 +36,10 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
-	empH := handlers.NewEmployeeHandler(gdb)
-	payH := handlers.NewPayrollHandler(gdb)
-	psH := handlers.NewPayslipHandler(gdb)
-	lvH := handlers.NewLeaveHandler(gdb)
+	empH := handlers.NewEmployeeHandler(store)
+	payH := handlers.NewPayrollHandler(store)
+	psH := handlers.NewPayslipHandler(store)
+	lvH := handlers.NewLeaveHandler(store)
 
 	api := r.Group("/api")
 	{
@@ -76,14 +75,10 @@ func getenv(k, def string) string {
 	return def
 }
 
-func migrate(db *gorm.DB) error {
-	return db.AutoMigrate(
-		&models.Employee{},
-		&models.Employment{},  // ถ้าไม่มี struct นี้ใน models ให้ลบบรรทัดนี้ออก
-		&models.PayrollRun{},
-		&models.PayrollItem{}, // ถ้าไม่มี struct นี้ใน models ให้ลบบรรทัดนี้ออก
-		&models.Leave{},
-	)
+func migrate(store *storage.Storage) error {
+	// in-memory storage has no schema migration requirement
+	_ = store
+	return nil
 }
 
 func enableCORS(r *gin.Engine) {
