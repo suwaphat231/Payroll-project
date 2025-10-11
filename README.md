@@ -1,15 +1,15 @@
 # Payroll Project
 
-## Running the backend Dockerfile
+This repository contains a demo payroll system with a Go backend, a React frontend, and a PostgreSQL database. The stack is wired together with Docker Compose so you can run the entire application locally with a single command.
 
-1. Build the backend image (run from the repository root):
-   ```bash
-   docker build -t payroll-backend -f backend/Dockerfile backend
-   ```
-2. Run a container from the image:
-   ```bash
-   docker run --rm -p 3000:3000 payroll-backend
-   ```
+## Prerequisites
 
-The backend binary listens on port `3000`, so the example command maps it to the same
-port on the host for local testing.
+* Docker and Docker Compose installed
+* (Optional) Node.js 18+ if you want to run the frontend without containers
+* (Optional) Go 1.23+ if you want to run the backend without containers
+
+## Quick start with Docker Compose
+
+```bash
+cd infra
+docker compose up --build

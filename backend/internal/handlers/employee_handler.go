@@ -79,12 +79,20 @@ func (h *EmployeeHandler) Create(c *gin.Context) {
 		FirstName string  `json:"firstName" binding:"required"`
 		LastName  string  `json:"lastName" binding:"required"`
 		Email     string  `json:"email"`
+		Phone     string  `json:"phone"`
 		Position  string  `json:"position"`
+		Department string `json:"department"`
 		Salary    float64 `json:"salary"`
 		Active    *bool   `json:"active"`
 	}
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload", "detail": err.Error()})
+		return
+	}
+
+	if req.Salary < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "salary must be >= 0"})
 		return
 	}
 
@@ -94,18 +102,21 @@ func (h *EmployeeHandler) Create(c *gin.Context) {
 	}
 
 	emp := &models.Employee{
-		Code:      req.Code,
-		FirstName: req.FirstName,
-		LastName:  req.LastName,
-		Email:     req.Email,
-		Position:  req.Position,
-		Salary:    req.Salary,
-		Active:    active,
+		Code:       strings.TrimSpace(req.Code),
+		FirstName:  strings.TrimSpace(req.FirstName),
+		LastName:   strings.TrimSpace(req.LastName),
+		Email:      strings.TrimSpace(req.Email),
+		Phone:      strings.TrimSpace(req.Phone),
+		Department: strings.TrimSpace(req.Department),
+		Position:   strings.TrimSpace(req.Position),
+		Salary:     req.Salary,
+		Active:     active,
 	}
 
 	if err := h.Store.CreateEmployee(emp); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create employee"})
 		return
 	}
+
 	c.JSON(http.StatusCreated, emp)
 }

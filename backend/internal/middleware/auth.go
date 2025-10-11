@@ -101,7 +101,6 @@ func parseToken(tokenString string) (*Claims, error) {
 			}
 			return jwtSecret, nil
 		},
-		// เปิด validation มาตรฐาน (exp, iat, …)
 		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}),
 	)
 	if err != nil || !token.Valid {

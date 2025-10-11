@@ -57,5 +57,6 @@ func (h *LeaveHandler) Create(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "create failed"})
 		return
 	}
+
 	c.JSON(http.StatusCreated, gin.H{"data": leave})
 }

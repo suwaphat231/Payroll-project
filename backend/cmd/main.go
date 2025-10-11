@@ -59,30 +59,30 @@ func enableCORS(r *gin.Engine) {
 }
 
 func registerRoutes(r *gin.Engine, store *storage.Storage) {
-    empH := handlers.NewEmployeeHandler(store)
-    payH := handlers.NewPayrollHandler(store)
-    psH := handlers.NewPayslipHandler(store)
-    lvH := handlers.NewLeaveHandler(store)
+	empH := handlers.NewEmployeeHandler(store)
+	payH := handlers.NewPayrollHandler(store)
+	psH := handlers.NewPayslipHandler(store)
+	lvH := handlers.NewLeaveHandler(store)
 
-    api := r.Group("/api")
-    {
-        api.POST("/auth/login", payH.Login)
+	api := r.Group("/api")
+	{
+		api.POST("/auth/login", payH.Login)
 
-        secured := api.Group("/")
-        if os.Getenv("NO_AUTH") != "1" {         // ← เพิ่ม 3 บรรทัดนี้
-            secured.Use(middleware.AuthRequired())
-        }
+		secured := api.Group("/")
+		if os.Getenv("NO_AUTH") != "1" {
+			secured.Use(middleware.AuthRequired())
+		}
 
-        secured.GET("/employees", empH.List)
-        secured.POST("/employees", empH.Create)
+		secured.GET("/employees", empH.List)
+		secured.POST("/employees", empH.Create)
 
-        secured.POST("/payroll/runs", payH.CreateRun)
-        secured.POST("/payroll/runs/:id/calculate", payH.CalculateRun)
-        secured.GET("/payroll/runs/:id/items", payH.ListRunItems)
-        secured.POST("/payroll/runs/:id/export-bank-csv", payH.ExportBankCSV)
+		secured.POST("/payroll/runs", payH.CreateRun)
+		secured.POST("/payroll/runs/:id/calculate", payH.CalculateRun)
+		secured.GET("/payroll/runs/:id/items", payH.ListRunItems)
+		secured.POST("/payroll/runs/:id/export-bank-csv", payH.ExportBankCSV)
 
-        secured.GET("/payslips/:runId", psH.ListByRun)
-        secured.GET("/leave", lvH.List)
-        secured.POST("/leave", lvH.Create)
-    }
+		secured.GET("/payslips/:runId", psH.ListByRun)
+		secured.GET("/leave", lvH.List)
+		secured.POST("/leave", lvH.Create)
+	}
 }

@@ -10,7 +10,7 @@ func NewEmployeeRepository(dbRepo *Repository) *EmployeeRepository {
 	return &EmployeeRepository{dbRepo}
 }
 
-// List ดึงพนักงานทั้งหมดพร้อมข้อมูล Employment
+// List ดึงพนักงานทั้งหมด (จาก in-memory store)
 func (r *EmployeeRepository) List() ([]models.Employee, error) {
 	return r.Store.ListEmployees()
 }

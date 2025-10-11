@@ -19,11 +19,11 @@ type PayrollItem struct {
 	Gross       float64    `json:"gross"`
 	TaxWithheld float64    `json:"taxWithheld"`
 	NetPay      float64    `json:"netPay"`
-	Details     string     `json:"details"`
+	Details     string     `json:"details,omitempty"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	UpdatedAt   time.Time  `json:"updatedAt"`
 
-	// relations (pointer ป้องกัน recursion)
-	Run      *PayrollRun `gorm:"foreignKey:RunID;references:ID" json:"-"`
-	Employee *Employee   `gorm:"foreignKey:EmployeeID;references:ID" json:"-"`
+	// Relations (pointer เพื่อป้องกัน recursive encode)
+	Run      *PayrollRun `gorm:"foreignKey:RunID;references:ID" json:"run,omitempty"`
+	Employee *Employee   `gorm:"foreignKey:EmployeeID;references:ID" json:"employee,omitempty"`
 }
