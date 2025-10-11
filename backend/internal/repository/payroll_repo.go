@@ -6,8 +6,8 @@ type PayrollRepository struct {
 	*Repository
 }
 
-func NewPayrollRepository(dbRepo *Repository) *PayrollRepository {
-	return &PayrollRepository{dbRepo}
+func NewPayrollRepository(repo *Repository) *PayrollRepository {
+	return &PayrollRepository{repo}
 }
 
 // CreateRun สร้าง payroll run ใหม่

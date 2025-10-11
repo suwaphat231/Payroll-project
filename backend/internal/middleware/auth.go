@@ -17,7 +17,7 @@ func SetJWTSecret(secret string) {
 	jwtSecret = []byte(secret)
 }
 
-// Claims ที่ฝัง RegisteredClaims ของ jwt/v5
+// ใช้ RegisteredClaims ของ jwt/v5
 type Claims struct {
 	UID   uint   `json:"uid"`
 	Role  string `json:"role"`
@@ -39,17 +39,12 @@ func GenerateToken(uid uint, role, email string, ttl time.Duration) (string, err
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(ttl)),
-			// ออปชัน: ใส่ Subject เพื่ออ้างอิง UID เป็น string ก็ได้
-			Subject: strconv.FormatUint(uint64(uid), 10),
+			Subject:   strconv.FormatUint(uint64(uid), 10),
 		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := token.SignedString(jwtSecret)
-	if err != nil {
-		return "", err
-	}
-	return signed, nil
+	return token.SignedString(jwtSecret)
 }
 
 // Middleware ตรวจสอบ Authorization: Bearer <token>
@@ -73,13 +68,13 @@ func AuthRequired() gin.HandlerFunc {
 			return
 		}
 
-		// jwt/v5 เช็ค exp ให้แล้ว แต่เผื่อกรณีเปิด validation แบบหลวม ๆ
+		// เผื่อเปิด validation แบบหลวม ๆ
 		if claims.ExpiresAt != nil && time.Now().After(claims.ExpiresAt.Time) {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token expired"})
 			return
 		}
 
-		// inject ข้อมูลลง context เผื่อ handler อื่น ๆ ใช้ต่อ
+		// inject ให้ handler อื่นใช้
 		c.Set("uid", claims.UID)
 		c.Set("role", claims.Role)
 		c.Set("email", claims.Email)
@@ -88,14 +83,13 @@ func AuthRequired() gin.HandlerFunc {
 	}
 }
 
-// แยกฟังก์ชัน parse เพื่อเทสง่าย
+// แยก parse เพื่อเทสง่าย
 func parseToken(tokenString string) (*Claims, error) {
 	claims := &Claims{}
 	token, err := jwt.ParseWithClaims(
 		tokenString,
 		claims,
 		func(t *jwt.Token) (interface{}, error) {
-			// รับเฉพาะ HS256
 			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, errors.New("unsupported signing method")
 			}

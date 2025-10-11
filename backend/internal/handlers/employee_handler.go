@@ -75,15 +75,15 @@ func (h *EmployeeHandler) List(c *gin.Context) {
 // POST /employees
 func (h *EmployeeHandler) Create(c *gin.Context) {
 	var req struct {
-		Code      string  `json:"code" binding:"required"`
-		FirstName string  `json:"firstName" binding:"required"`
-		LastName  string  `json:"lastName" binding:"required"`
-		Email     string  `json:"email"`
-		Phone     string  `json:"phone"`
-		Position  string  `json:"position"`
-		Department string `json:"department"`
-		Salary    float64 `json:"salary"`
-		Active    *bool   `json:"active"`
+		Code       string  `json:"code" binding:"required"`
+		FirstName  string  `json:"firstName" binding:"required"`
+		LastName   string  `json:"lastName" binding:"required"`
+		Email      string  `json:"email"`
+		Phone      string  `json:"phone"`
+		Position   string  `json:"position"`
+		Department string  `json:"department"`
+		Salary     float64 `json:"salary"`
+		Active     *bool   `json:"active"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {

@@ -6,8 +6,8 @@ type PayslipRepository struct {
 	*Repository
 }
 
-func NewPayslipRepository(dbRepo *Repository) *PayslipRepository {
-	return &PayslipRepository{dbRepo}
+func NewPayslipRepository(repo *Repository) *PayslipRepository {
+	return &PayslipRepository{repo}
 }
 
 // ListByRun ดึง payslips ทั้งหมดของ payroll run

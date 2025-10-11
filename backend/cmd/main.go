@@ -21,15 +21,18 @@ func main() {
 	// ใช้ in-memory store
 	store := storage.New()
 
+	// ตั้งค่า JWT secret ให้ middleware
 	middleware.SetJWTSecret(jwtSecret)
 
 	r := gin.Default()
 	enableCORS(r)
 
+	// Health check
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
+	// Register routes
 	registerRoutes(r, store)
 
 	log.Printf("Server ready at http://localhost:%s", port)
@@ -66,8 +69,10 @@ func registerRoutes(r *gin.Engine, store *storage.Storage) {
 
 	api := r.Group("/api")
 	{
+		// public
 		api.POST("/auth/login", payH.Login)
 
+		// secured
 		secured := api.Group("/")
 		if os.Getenv("NO_AUTH") != "1" {
 			secured.Use(middleware.AuthRequired())
@@ -82,6 +87,7 @@ func registerRoutes(r *gin.Engine, store *storage.Storage) {
 		secured.POST("/payroll/runs/:id/export-bank-csv", payH.ExportBankCSV)
 
 		secured.GET("/payslips/:runId", psH.ListByRun)
+
 		secured.GET("/leave", lvH.List)
 		secured.POST("/leave", lvH.Create)
 	}
