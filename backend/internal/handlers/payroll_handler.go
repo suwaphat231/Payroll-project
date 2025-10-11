@@ -13,10 +13,10 @@ import (
 	"backend/internal/models"
 	"backend/internal/repository"
 	"backend/internal/services"
+	"backend/internal/storage"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
 )
 
 type PayrollHandler struct {
@@ -24,8 +24,8 @@ type PayrollHandler struct {
 	Svc   *services.PayrollService
 }
 
-func NewPayrollHandler(db *gorm.DB) *PayrollHandler {
-	base := repository.New(db)
+func NewPayrollHandler(store *storage.Storage) *PayrollHandler {
+	base := repository.New(store)
 	prepo := repository.NewPayrollRepository(base)
 	return &PayrollHandler{
 		PRepo: prepo,
@@ -116,7 +116,7 @@ func (h *PayrollHandler) ListRunItems(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	items, err := h.PRepo.ListItems(uint(id))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "storage error"})
 		return
 	}
 	c.JSON(http.StatusOK, items)
@@ -127,13 +127,13 @@ func (h *PayrollHandler) ExportBankCSV(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	items, err := h.PRepo.ListItems(uint(id))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "storage error"})
 		return
 	}
 
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
-	w.Write([]string{"employee_code", "name", "bank_code", "amount", "ref"})
+	_ = w.Write([]string{"employee_code", "name", "bank_code", "amount", "ref"})
 
 	for _, it := range items {
 		row := []string{
@@ -143,7 +143,7 @@ func (h *PayrollHandler) ExportBankCSV(c *gin.Context) {
 			fmt.Sprintf("%.2f", it.NetPay),
 			fmt.Sprintf("RUN-%d", it.RunID),
 		}
-		w.Write(row)
+		_ = w.Write(row)
 	}
 	w.Flush()
 
