@@ -2,98 +2,119 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 	"strings"
-	"time"
 
 	"backend/internal/models"
-	"backend/internal/repository"
+	"backend/internal/storage"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 type EmployeeHandler struct {
-	Repo *repository.EmployeeRepository
+	Store *storage.Storage
 }
 
-func NewEmployeeHandler(db *gorm.DB) *EmployeeHandler {
-	base := repository.New(db)
-	return &EmployeeHandler{Repo: repository.NewEmployeeRepository(base)}
+func NewEmployeeHandler(store *storage.Storage) *EmployeeHandler {
+	return &EmployeeHandler{Store: store}
 }
 
+// GET /employees?q=&limit=&offset=
 func (h *EmployeeHandler) List(c *gin.Context) {
-	emps, err := h.Repo.List()
+	q := strings.TrimSpace(c.Query("q"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+
+	emps, err := h.Store.ListEmployees()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db error"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list employees"})
 		return
 	}
-	c.JSON(http.StatusOK, emps)
+
+	// filter by q (code/first/last/email/position)
+	if q != "" {
+		qLow := strings.ToLower(q)
+		filtered := make([]models.Employee, 0, len(emps))
+		for _, e := range emps {
+			if strings.Contains(strings.ToLower(e.Code), qLow) ||
+				strings.Contains(strings.ToLower(e.FirstName), qLow) ||
+				strings.Contains(strings.ToLower(e.LastName), qLow) ||
+				strings.Contains(strings.ToLower(e.Email), qLow) ||
+				strings.Contains(strings.ToLower(e.Position), qLow) {
+				filtered = append(filtered, e)
+			}
+		}
+		emps = filtered
+	}
+
+	// pagination
+	if offset < 0 {
+		offset = 0
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	end := offset + limit
+	if offset > len(emps) {
+		offset = len(emps)
+	}
+	if end > len(emps) {
+		end = len(emps)
+	}
+	page := emps[offset:end]
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":   page,
+		"count":  len(page),
+		"total":  len(emps),
+		"limit":  limit,
+		"offset": offset,
+	})
 }
 
+// POST /employees
 func (h *EmployeeHandler) Create(c *gin.Context) {
-	var body struct {
-		Code           string  `json:"code"`
-		FirstName      string  `json:"firstName"`
-		LastName       string  `json:"lastName"`
-		Email          string  `json:"email"`
-		Phone          string  `json:"phone"`
-		Department     string  `json:"department"`
-		Position       string  `json:"position"`
-		EmploymentType string  `json:"employmentType"`
-		Status         string  `json:"status"`
-		BaseSalary     float64 `json:"baseSalary"`
-		HireDate       string  `json:"hireDate"`
-		Address        string  `json:"address"`
-		Notes          string  `json:"notes"`
+	var req struct {
+		Code       string  `json:"code" binding:"required"`
+		FirstName  string  `json:"firstName" binding:"required"`
+		LastName   string  `json:"lastName" binding:"required"`
+		Email      string  `json:"email"`
+		Phone      string  `json:"phone"`
+		Position   string  `json:"position"`
+		Department string  `json:"department"`
+		Salary     float64 `json:"salary"`
+		Active     *bool   `json:"active"`
 	}
 
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload", "detail": err.Error()})
 		return
 	}
 
-	if strings.TrimSpace(body.Code) == "" || strings.TrimSpace(body.FirstName) == "" || strings.TrimSpace(body.LastName) == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "missing required fields"})
+	if req.Salary < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "salary must be >= 0"})
 		return
 	}
 
-	if body.BaseSalary < 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "baseSalary must be >= 0"})
-		return
+	active := true
+	if req.Active != nil {
+		active = *req.Active
 	}
 
-	hire, err := time.Parse(time.RFC3339, body.HireDate)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid hireDate"})
-		return
+	emp := &models.Employee{
+		Code:       strings.TrimSpace(req.Code),
+		FirstName:  strings.TrimSpace(req.FirstName),
+		LastName:   strings.TrimSpace(req.LastName),
+		Email:      strings.TrimSpace(req.Email),
+		Phone:      strings.TrimSpace(req.Phone),
+		Department: strings.TrimSpace(req.Department),
+		Position:   strings.TrimSpace(req.Position),
+		Salary:     req.Salary,
+		Active:     active,
 	}
 
-	status := body.Status
-	if status == "" {
-		status = "Active"
-	}
-
-	emp := models.Employee{
-		Code:           strings.TrimSpace(body.Code),
-		FirstName:      strings.TrimSpace(body.FirstName),
-		LastName:       strings.TrimSpace(body.LastName),
-		Email:          strings.TrimSpace(body.Email),
-		Phone:          strings.TrimSpace(body.Phone),
-		Department:     strings.TrimSpace(body.Department),
-		Position:       strings.TrimSpace(body.Position),
-		EmploymentType: strings.TrimSpace(body.EmploymentType),
-		Status:         status,
-		Active:         !strings.EqualFold(status, "Resigned"),
-		Address:        strings.TrimSpace(body.Address),
-		Notes:          strings.TrimSpace(body.Notes),
-		Employment: &models.Employment{
-			HireDate:   hire,
-			BaseSalary: body.BaseSalary,
-		},
-	}
-
-	if err := h.Repo.Create(&emp); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "create failed"})
+	if err := h.Store.CreateEmployee(emp); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create employee"})
 		return
 	}
 

@@ -1,25 +1,21 @@
 package repository
 
-import (
-	"backend/internal/models"
-)
+import "backend/internal/models"
 
 type EmployeeRepository struct {
 	*Repository
 }
 
-func NewEmployeeRepository(dbRepo *Repository) *EmployeeRepository {
-	return &EmployeeRepository{dbRepo}
+func NewEmployeeRepository(repo *Repository) *EmployeeRepository {
+	return &EmployeeRepository{repo}
 }
 
-// List ดึงพนักงานทั้งหมดพร้อมข้อมูล Employment
+// List ดึงพนักงานทั้งหมด (in-memory)
 func (r *EmployeeRepository) List() ([]models.Employee, error) {
-	var out []models.Employee
-	err := r.DB.Preload("Employment").Order("code ASC").Find(&out).Error
-	return out, err
+	return r.Store.ListEmployees()
 }
 
-// Create เพิ่มพนักงานใหม่
+// Create เพิ่มพนักงานใหม่ (in-memory)
 func (r *EmployeeRepository) Create(e *models.Employee) error {
-	return r.DB.Create(e).Error
+	return r.Store.CreateEmployee(e)
 }
