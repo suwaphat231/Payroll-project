@@ -69,30 +69,45 @@ func (h *PayrollHandler) Login(c *gin.Context) {
 }
 
 // POST /api/payroll/runs
+// body รองรับ 2 แบบ:
+// 1) {"year":2025,"month":9}
+// 2) {"payDate":"2025-09"} หรือ "2025-09-30" หรือ RFC3339
 func (h *PayrollHandler) CreateRun(c *gin.Context) {
 	var body struct {
-		PeriodStart string `json:"periodStart"`
-		PeriodEnd   string `json:"periodEnd"`
-		PayDate     string `json:"payDate"`
+		Year    int     `json:"year"`
+		Month   int     `json:"month"`
+		PayDate *string `json:"payDate"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 		return
 	}
 
-	ps, e1 := time.Parse(time.RFC3339, body.PeriodStart)
-	pe, e2 := time.Parse(time.RFC3339, body.PeriodEnd)
-	pd, e3 := time.Parse(time.RFC3339, body.PayDate)
-	if e1 != nil || e2 != nil || e3 != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid dates"})
-		return
+	// แปลง payDate -> year/month ถ้ายังไม่ระบุ
+	if (body.Year == 0 || body.Month == 0) && body.PayDate != nil && *body.PayDate != "" {
+		if t, err := time.Parse("2006-01-02", *body.PayDate); err == nil {
+			body.Year = t.Year()
+			body.Month = int(t.Month())
+		} else if t2, err2 := time.Parse("2006-01", *body.PayDate); err2 == nil {
+			body.Year = t2.Year()
+			body.Month = int(t2.Month())
+		} else if t3, err3 := time.Parse(time.RFC3339, *body.PayDate); err3 == nil {
+			body.Year = t3.Year()
+			body.Month = int(t3.Month())
+		}
 	}
-	if pe.Before(ps) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "periodEnd must be on/after periodStart"})
+
+	if body.Year <= 0 || body.Month < 1 || body.Month > 12 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "year/month is required and must be valid"})
 		return
 	}
 
-	run := models.PayrollRun{PeriodStart: ps, PeriodEnd: pe, PayDate: pd}
+	run := models.PayrollRun{
+		PeriodYear:  body.Year,
+		PeriodMonth: body.Month,
+		Locked:      false,
+	}
+
 	if err := h.PRepo.CreateRun(&run); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "create run failed"})
 		return

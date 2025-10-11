@@ -1,42 +1,23 @@
 package models
 
-import (
-	"time"
-
-	"gorm.io/gorm"
-)
+import "time"
 
 type Employee struct {
-	gorm.Model
-	Code       string       `gorm:"uniqueIndex;size:50;not null" json:"code"`
-	FirstName  string       `gorm:"size:100;not null" json:"firstName"`
-	LastName   string       `gorm:"size:100;not null" json:"lastName"`
-	Email      string       `gorm:"size:150" json:"email,omitempty"`
-	Phone      string       `gorm:"size:50" json:"phone,omitempty"`
-	Department string       `gorm:"size:100" json:"department,omitempty"`
-	Position   string       `gorm:"size:100" json:"position,omitempty"`
-	Salary     float64      `json:"salary"` // ใช้กับ in-memory handler ปัจจุบัน
-	Address    string       `gorm:"size:255" json:"address,omitempty"`
-	Notes      string       `gorm:"size:255" json:"notes,omitempty"`
-	Active     bool         `gorm:"default:true" json:"active"`
-	Employment *Employment  `json:"employment,omitempty"`
+	ID              uint       `gorm:"primaryKey;column:id" json:"id"`
+	EmpCode         string     `gorm:"column:emp_code;uniqueIndex;not null" json:"empCode"`
+	FirstName       string     `gorm:"column:first_name;not null" json:"firstName"`
+	LastName        string     `gorm:"column:last_name;not null" json:"lastName"`
+	Department      string     `gorm:"column:department" json:"department"`
+	Position        string     `gorm:"column:position" json:"position"`
+	BaseSalary      float64    `gorm:"column:base_salary;not null" json:"baseSalary"`
+	BankAccount     string     `gorm:"column:bank_account" json:"bankAccount"`
+	PVDRate         float64    `gorm:"column:pvd_rate;default:0.03" json:"pvdRate"`
+	WithholdingRate float64    `gorm:"column:withholding_rate;default:0" json:"withholdingRate"`
+	SSOEnabled      bool       `gorm:"column:sso_enabled;default:true" json:"ssoEnabled"`
+	Status          string     `gorm:"column:status;default:active" json:"status"`
+	HiredAt         time.Time  `gorm:"column:hired_at;default:current_date" json:"hiredAt"`
+	TerminatedAt    *time.Time `gorm:"column:terminated_at" json:"terminatedAt"`
 }
 
-// ชื่อเต็มสำหรับฝั่ง frontend
-func (e Employee) FullName() string {
-	if e.LastName == "" {
-		return e.FirstName
-	}
-	if e.FirstName == "" {
-		return e.LastName
-	}
-	return e.FirstName + " " + e.LastName
-}
-
-type Employment struct {
-	gorm.Model
-	EmployeeID uint        `gorm:"uniqueIndex" json:"employeeId"`
-	HireDate   time.Time   `json:"hireDate,omitempty"`
-	EndDate    *time.Time  `json:"endDate,omitempty"`
-	BaseSalary float64     `json:"baseSalary,omitempty"`
-}
+// บังคับชื่อ table ให้ตรงกับ DDL (ถ้าโปรเจ็กต์ไม่ได้ตั้ง naming strategy เป็นพหูพจน์)
+func (Employee) TableName() string { return "employees" }

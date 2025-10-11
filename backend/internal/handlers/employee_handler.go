@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"backend/internal/models"
 	"backend/internal/storage"
@@ -31,15 +32,15 @@ func (h *EmployeeHandler) List(c *gin.Context) {
 		return
 	}
 
-	// filter by q (code/first/last/email/position)
+	// filter by q (emp_code / first_name / last_name / department / position)
 	if q != "" {
 		qLow := strings.ToLower(q)
 		filtered := make([]models.Employee, 0, len(emps))
 		for _, e := range emps {
-			if strings.Contains(strings.ToLower(e.Code), qLow) ||
+			if strings.Contains(strings.ToLower(e.EmpCode), qLow) ||
 				strings.Contains(strings.ToLower(e.FirstName), qLow) ||
 				strings.Contains(strings.ToLower(e.LastName), qLow) ||
-				strings.Contains(strings.ToLower(e.Email), qLow) ||
+				strings.Contains(strings.ToLower(e.Department), qLow) ||
 				strings.Contains(strings.ToLower(e.Position), qLow) {
 				filtered = append(filtered, e)
 			}
@@ -47,17 +48,17 @@ func (h *EmployeeHandler) List(c *gin.Context) {
 		emps = filtered
 	}
 
-	// pagination
+	// pagination (guard)
 	if offset < 0 {
 		offset = 0
 	}
 	if limit <= 0 {
 		limit = 50
 	}
-	end := offset + limit
 	if offset > len(emps) {
 		offset = len(emps)
 	}
+	end := offset + limit
 	if end > len(emps) {
 		end = len(emps)
 	}
@@ -74,16 +75,20 @@ func (h *EmployeeHandler) List(c *gin.Context) {
 
 // POST /employees
 func (h *EmployeeHandler) Create(c *gin.Context) {
+	// สอดคล้องกับสคีมา employees ใน 001_init.sql
 	var req struct {
-		Code       string  `json:"code" binding:"required"`
-		FirstName  string  `json:"firstName" binding:"required"`
-		LastName   string  `json:"lastName" binding:"required"`
-		Email      string  `json:"email"`
-		Phone      string  `json:"phone"`
-		Position   string  `json:"position"`
-		Department string  `json:"department"`
-		Salary     float64 `json:"salary"`
-		Active     *bool   `json:"active"`
+		EmpCode         string   `json:"empCode" binding:"required"`
+		FirstName       string   `json:"firstName" binding:"required"`
+		LastName        string   `json:"lastName" binding:"required"`
+		Department      string   `json:"department"`
+		Position        string   `json:"position"`
+		BaseSalary      float64  `json:"baseSalary" binding:"required"`
+		BankAccount     string   `json:"bankAccount"`
+		PVDRate         *float64 `json:"pvdRate"`         // optional (default 0.03)
+		WithholdingRate *float64 `json:"withholdingRate"` // optional (default 0)
+		SSOEnabled      *bool    `json:"ssoEnabled"`      // optional (default true)
+		Status          *string  `json:"status"`          // optional (default "active")
+		HiredAt         *string  `json:"hiredAt"`         // optional (RFC3339 / YYYY-MM-DD)
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -91,26 +96,72 @@ func (h *EmployeeHandler) Create(c *gin.Context) {
 		return
 	}
 
-	if req.Salary < 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "salary must be >= 0"})
+	// validate
+	if req.BaseSalary < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "baseSalary must be >= 0"})
 		return
 	}
+	// defaults
+	pvd := 0.03
+	if req.PVDRate != nil {
+		pvd = *req.PVDRate
+	}
+	if pvd < 0 || pvd > 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "pvdRate must be between 0 and 1"})
+		return
+	}
+	wh := 0.0
+	if req.WithholdingRate != nil {
+		wh = *req.WithholdingRate
+	}
+	if wh < 0 || wh > 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "withholdingRate must be between 0 and 1"})
+		return
+	}
+	sso := true
+	if req.SSOEnabled != nil {
+		sso = *req.SSOEnabled
+	}
+	status := "active"
+	if req.Status != nil && *req.Status != "" {
+		if *req.Status != "active" && *req.Status != "terminated" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "status must be 'active' or 'terminated'"})
+			return
+		}
+		status = *req.Status
+	}
 
-	active := true
-	if req.Active != nil {
-		active = *req.Active
+	var hiredAt time.Time
+	if req.HiredAt != nil && *req.HiredAt != "" {
+		// รองรับทั้ง YYYY-MM-DD และ RFC3339
+		parsed, err := time.Parse("2006-01-02", *req.HiredAt)
+		if err != nil {
+			if parsed2, err2 := time.Parse(time.RFC3339, *req.HiredAt); err2 == nil {
+				hiredAt = parsed2
+			} else {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid hiredAt format; use YYYY-MM-DD or RFC3339"})
+				return
+			}
+		} else {
+			hiredAt = parsed
+		}
+	} else {
+		hiredAt = time.Now()
 	}
 
 	emp := &models.Employee{
-		Code:       strings.TrimSpace(req.Code),
-		FirstName:  strings.TrimSpace(req.FirstName),
-		LastName:   strings.TrimSpace(req.LastName),
-		Email:      strings.TrimSpace(req.Email),
-		Phone:      strings.TrimSpace(req.Phone),
-		Department: strings.TrimSpace(req.Department),
-		Position:   strings.TrimSpace(req.Position),
-		Salary:     req.Salary,
-		Active:     active,
+		EmpCode:         strings.TrimSpace(req.EmpCode),
+		FirstName:       strings.TrimSpace(req.FirstName),
+		LastName:        strings.TrimSpace(req.LastName),
+		Department:      strings.TrimSpace(req.Department),
+		Position:        strings.TrimSpace(req.Position),
+		BaseSalary:      req.BaseSalary,
+		BankAccount:     strings.TrimSpace(req.BankAccount),
+		PVDRate:         pvd,
+		WithholdingRate: wh,
+		SSOEnabled:      sso,
+		Status:          status,
+		HiredAt:         hiredAt,
 	}
 
 	if err := h.Store.CreateEmployee(emp); err != nil {

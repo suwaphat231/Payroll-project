@@ -5,6 +5,7 @@ import (
 	"backend/internal/repository"
 	"errors"
 	"math"
+	"strconv"
 	"time"
 )
 
@@ -19,11 +20,17 @@ func NewPayrollService(repo *repository.PayrollRepository) *PayrollService {
 // CalculateRun คำนวณ payroll run และสร้าง PayrollItem
 func (s *PayrollService) CalculateRun(runID uint) (int, error) {
 	run, err := s.Repo.GetRunByID(runID)
-	if err != nil {
+	if err != nil || run == nil {
 		return 0, errors.New("run not found")
 	}
 
-	// ลบ items เก่าก่อน
+	// หา periodStart/periodEnd จาก year/month ของ run
+	ps, pe, err := monthStartEnd(run.PeriodYear, run.PeriodMonth)
+	if err != nil {
+		return 0, err
+	}
+
+	// ล้าง items เก่าก่อน
 	if err := s.Repo.ClearItems(run.ID); err != nil {
 		return 0, err
 	}
@@ -35,18 +42,24 @@ func (s *PayrollService) CalculateRun(runID uint) (int, error) {
 
 	count := 0
 	for _, e := range emps {
-		if e.Employment == nil {
-			continue
-		}
+		// ใช้โครงสร้างใหม่: ข้อมูลอยู่บน employees โดยตรง
+		hire := e.HiredAt
+		var end *time.Time = e.TerminatedAt
 
-		worked, total := overlapDays(e.Employment.HireDate, e.Employment.EndDate, run.PeriodStart, run.PeriodEnd)
+		worked, total := overlapDays(hire, end, ps, pe)
 		if total <= 0 || worked <= 0 {
 			continue
 		}
 
-		// คำนวณเงินเดือนตามสัดส่วนวันทำงาน
-		gross := e.Employment.BaseSalary * (float64(worked) / float64(total))
-		tax := gross * 0.05
+		// เงินเดือนตามสัดส่วนวันทำงาน
+		gross := e.BaseSalary * (float64(worked) / float64(total))
+
+		// ใช้อัตราภาษีรายบุคคล ถ้าไม่มีให้ fallback เป็น 5%
+		rate := e.WithholdingRate
+		if rate <= 0 {
+			rate = 0.05
+		}
+		tax := gross * rate
 		net := gross - tax
 
 		item := &models.PayrollItem{
@@ -55,7 +68,7 @@ func (s *PayrollService) CalculateRun(runID uint) (int, error) {
 			Gross:       round2(gross),
 			TaxWithheld: round2(tax),
 			NetPay:      round2(net),
-			Details:     "base prorated; tax 5%",
+			Details:     "base prorated; tax " + pctText(rate),
 		}
 
 		if err := s.Repo.SaveItem(item); err != nil {
@@ -67,8 +80,20 @@ func (s *PayrollService) CalculateRun(runID uint) (int, error) {
 	return count, nil
 }
 
+// monthStartEnd คืนค่า (วันแรก, วันสุดท้าย) ของเดือนที่กำหนด (เวลา 00:00:00)
+func monthStartEnd(year, month int) (time.Time, time.Time, error) {
+	if year < 1 || month < 1 || month > 12 {
+		return time.Time{}, time.Time{}, errors.New("invalid payroll period")
+	}
+	loc := time.Local
+	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, loc)
+	end := start.AddDate(0, 1, -1) // วันสุดท้ายของเดือน
+	return start, end, nil
+}
+
 // overlapDays คำนวณจำนวนวันทำงานที่ซ้อนกับ period
 func overlapDays(hire time.Time, end *time.Time, ps, pe time.Time) (worked, total int) {
+	// รวมปลายทาง 1 วัน (inclusive)
 	total = int(pe.Sub(ps).Hours()/24) + 1
 	if total < 0 {
 		total = 0
@@ -108,4 +133,15 @@ func minTime(a, b time.Time) time.Time {
 
 func round2(n float64) float64 {
 	return math.Round(n*100) / 100
+}
+
+func pctText(r float64) string {
+	// แปลง 0.05 -> "5%"
+	return trimTrailingZeros(round2(r * 100))
+}
+
+func trimTrailingZeros(f float64) string {
+	// 5 -> "5", 5.5 -> "5.5"
+	s := strconv.FormatFloat(f, 'f', -1, 64)
+	return s + "%"
 }

@@ -1,6 +1,7 @@
 module backend
 
 go 1.23.0
+
 toolchain go1.24.5
 
 require (
@@ -10,7 +11,6 @@ require (
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.25.11
 )
-
 
 require (
 	github.com/bytedance/sonic v1.14.0 // indirect

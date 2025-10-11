@@ -14,7 +14,6 @@ type Storage struct {
 	mu sync.RWMutex
 
 	nextEmployee    uint
-	nextEmployment  uint
 	nextPayrollRun  uint
 	nextPayrollItem uint
 	nextPayslip     uint
@@ -22,7 +21,7 @@ type Storage struct {
 
 	employees    map[uint]*models.Employee
 	payrollRuns  map[uint]*models.PayrollRun
-	payrollItems map[uint]map[uint]*models.PayrollItem
+	payrollItems map[uint]map[uint]*models.PayrollItem // runID -> (itemID -> item)
 	payslips     map[uint]*models.Payslip
 	leaves       map[uint]*models.Leave
 }
@@ -38,24 +37,13 @@ func New() *Storage {
 	}
 }
 
-// CreateEmployee persists a new employee and its employment record if provided.
+// CreateEmployee persists a new employee.
 func (s *Storage) CreateEmployee(e *models.Employee) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.nextEmployee++
 	e.ID = s.nextEmployee
-	now := time.Now().UTC()
-	e.CreatedAt = now
-	e.UpdatedAt = now
-
-	if e.Employment != nil {
-		s.nextEmployment++
-		e.Employment.ID = s.nextEmployment
-		e.Employment.EmployeeID = e.ID
-		e.Employment.CreatedAt = now
-		e.Employment.UpdatedAt = now
-	}
 
 	cp := copyEmployee(e)
 	s.employees[e.ID] = &cp
@@ -76,14 +64,14 @@ func (s *Storage) ListEmployees() ([]models.Employee, error) {
 	return out, nil
 }
 
-// ListActiveEmployees returns employees flagged as active.
+// ListActiveEmployees returns employees with status = 'active'.
 func (s *Storage) ListActiveEmployees() ([]models.Employee, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	out := make([]models.Employee, 0, len(s.employees))
 	for _, e := range s.employees {
-		if !e.Active {
+		if e.Status != "active" {
 			continue
 		}
 		cp := copyEmployee(e)
@@ -100,9 +88,7 @@ func (s *Storage) CreatePayrollRun(run *models.PayrollRun) error {
 
 	s.nextPayrollRun++
 	run.ID = s.nextPayrollRun
-	now := time.Now().UTC()
-	run.CreatedAt = now
-	run.UpdatedAt = now
+	run.CreatedAt = time.Now().UTC()
 
 	cp := *run
 	s.payrollRuns[run.ID] = &cp
@@ -138,9 +124,7 @@ func (s *Storage) SavePayrollItem(item *models.PayrollItem) error {
 
 	s.nextPayrollItem++
 	item.ID = s.nextPayrollItem
-	now := time.Now().UTC()
-	item.CreatedAt = now
-	item.UpdatedAt = now
+	item.GeneratedAt = time.Now().UTC()
 
 	if _, ok := s.payrollItems[item.RunID]; !ok {
 		s.payrollItems[item.RunID] = make(map[uint]*models.PayrollItem)
@@ -172,9 +156,8 @@ func (s *Storage) CreatePayslip(slip *models.Payslip) error {
 
 	s.nextPayslip++
 	slip.ID = s.nextPayslip
-	now := time.Now().UTC()
-	slip.CreatedAt = now
-	slip.UpdatedAt = now
+	slip.CreatedAt = time.Now().UTC()
+	// ถ้าโมเดลมี UpdatedAt ให้ตั้งค่าเพิ่มที่นี่
 
 	cp := *slip
 	s.payslips[slip.ID] = &cp
@@ -232,9 +215,8 @@ func (s *Storage) CreateLeave(lv *models.Leave) error {
 
 	s.nextLeave++
 	lv.ID = s.nextLeave
-	now := time.Now().UTC()
-	lv.CreatedAt = now
-	lv.UpdatedAt = now
+	lv.CreatedAt = time.Now().UTC()
+	// ถ้ามี UpdatedAt ในโมเดลค่อยตั้งเพิ่ม
 
 	cp := *lv
 	s.leaves[lv.ID] = &cp
@@ -257,9 +239,6 @@ func (s *Storage) ListLeaves() ([]models.Leave, error) {
 
 func copyEmployee(e *models.Employee) models.Employee {
 	cp := *e
-	if e.Employment != nil {
-		emp := *e.Employment
-		cp.Employment = &emp
-	}
+	// ไม่มี Employment ในสคีมาใหม่แล้ว
 	return cp
 }
