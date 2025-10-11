@@ -1,35 +1,47 @@
-// src/hooks/useAuth.js
 import { useEffect, useState } from "react";
+import { AUTH_STORAGE_KEY } from "../constants";
+
+function readAuth() {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function useAuth() {
-  const [user, setUser] = useState(() => {
-    try {
-      const raw = localStorage.getItem("user");
-      return raw ? JSON.parse(raw) : null; // { name, role }
-    } catch {
-      return null;
-    }
-  });
+  const [auth, setAuth] = useState(() => readAuth());
 
-  const login = (name, role = "employee") => {
-    const u = { name: name || "Guest", role: (role || "employee").toLowerCase() };
-    localStorage.setItem("user", JSON.stringify(u));
-    setUser(u);
+  const login = (authPayload) => {
+    const safe = authPayload || null;
+    if (safe) {
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(safe));
+    } else {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+    }
+    setAuth(safe);
   };
 
   const logout = () => {
-    localStorage.removeItem("user");
-    setUser(null);
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+    setAuth(null);
   };
 
   useEffect(() => {
     const onStorage = () => {
-      const raw = localStorage.getItem("user");
-      setUser(raw ? JSON.parse(raw) : null);
+      setAuth(readAuth());
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  return { user, role: user?.role || null, name: user?.name || null, login, logout };
+  return {
+    user: auth?.user || null,
+    name: auth?.user?.name || null,
+    role: auth?.user?.role ? auth.user.role.toLowerCase() : null,
+    token: auth?.token || null,
+    login,
+    logout,
+  };
 }
