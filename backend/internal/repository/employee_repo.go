@@ -15,7 +15,7 @@ func NewEmployeeRepository(dbRepo *Repository) *EmployeeRepository {
 // List ดึงพนักงานทั้งหมดพร้อมข้อมูล Employment
 func (r *EmployeeRepository) List() ([]models.Employee, error) {
 	var out []models.Employee
-	err := r.DB.Preload("Employment").Find(&out).Error
+	err := r.DB.Preload("Employment").Order("code ASC").Find(&out).Error
 	return out, err
 }
 

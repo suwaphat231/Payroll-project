@@ -12,10 +12,14 @@ type PayrollRun struct {
 }
 
 type PayrollItem struct {
-	ID         uint    `gorm:"primaryKey" json:"id"`
-	RunID      uint    `gorm:"index" json:"runId"`
-	EmployeeID uint    `gorm:"index" json:"employeeId"`
-	NetPay     float64 `json:"netPay"`
-	CreatedAt  time.Time `json:"createdAt"`
-	UpdatedAt  time.Time `json:"updatedAt"`
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	RunID       uint      `gorm:"index" json:"runId"`
+	EmployeeID  uint      `gorm:"index" json:"employeeId"`
+	Gross       float64   `json:"gross"`
+	TaxWithheld float64   `json:"taxWithheld"`
+	NetPay      float64   `json:"netPay"`
+	Details     string    `json:"details,omitempty"`
+	Employee    *Employee `gorm:"foreignKey:EmployeeID" json:"employee,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+	UpdatedAt   time.Time `json:"updatedAt"`
 }

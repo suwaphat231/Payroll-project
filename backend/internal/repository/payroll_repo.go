@@ -39,7 +39,12 @@ func (r *PayrollRepository) SaveItem(item *models.PayrollItem) error {
 // ListItems ดึง payroll items ของ run
 func (r *PayrollRepository) ListItems(runID uint) ([]models.PayrollItem, error) {
 	var items []models.PayrollItem
-	err := r.DB.Where("run_id = ?", runID).Find(&items).Error
+	err := r.DB.
+		Preload("Employee").
+		Preload("Employee.Employment").
+		Where("run_id = ?", runID).
+		Order("id ASC").
+		Find(&items).Error
 	return items, err
 }
 

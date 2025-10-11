@@ -2,16 +2,15 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import "./index.css";
 
-
 // 🧩 Layout หลัก + ระบบตรวจสิทธิ์
 import Layout from "./components/Layout";
 import RoleGuard from "./components/RoleGuard";
-
 
 // 📄 เพจทั้งหมด (แค่มีไฟล์เปล่าก็ได้)
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import EmployeesPage from "./pages/EmployeesPage";
+import AddEmployeePage from "./pages/Add_new_employees";
 import PayrollPage from "./pages/PayrollPage";
 import PayslipPage from "./pages/PayslipPage";
 import LeavePage from "./pages/LeavePage";
@@ -39,6 +38,14 @@ export default function App() {
           {/* เส้นทางของแต่ละหน้าในระบบ */}
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/employees" element={<EmployeesPage />} />
+          <Route
+            path="/employees/new"
+            element={
+              <RoleGuard allowed={["admin", "hr"]}>
+                <AddEmployeePage />
+              </RoleGuard>
+            }
+          />
           <Route path="/payroll" element={<PayrollPage />} />
           <Route path="/payslips" element={<PayslipPage />} />
           <Route path="/leave" element={<LeavePage />} />
@@ -63,7 +70,10 @@ export default function App() {
         </Route>
 
         {/* ⚠️ 404 Page */}
-        <Route path="*" element={<div style={{ padding: 24 }}>404 Not Found</div>} />
+        <Route
+          path="*"
+          element={<div style={{ padding: 24 }}>404 Not Found</div>}
+        />
       </Routes>
     </BrowserRouter>
   );

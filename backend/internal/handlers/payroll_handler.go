@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"backend/internal/middleware"
@@ -46,7 +47,7 @@ func (h *PayrollHandler) Login(c *gin.Context) {
 	adminEmail := "admin@example.com"
 	adminPassHash, _ := bcrypt.GenerateFromPassword([]byte("Admin@123"), 10)
 
-	if body.Email != adminEmail || bcrypt.CompareHashAndPassword(adminPassHash, []byte(body.Password)) != nil {
+	if !strings.EqualFold(body.Email, adminEmail) || bcrypt.CompareHashAndPassword(adminPassHash, []byte(body.Password)) != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		return
 	}
@@ -56,7 +57,15 @@ func (h *PayrollHandler) Login(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "token error"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"token": token})
+	c.JSON(http.StatusOK, gin.H{
+		"token": token,
+		"user": gin.H{
+			"id":    1,
+			"name":  "Administrator",
+			"email": strings.ToLower(body.Email),
+			"role":  "admin",
+		},
+	})
 }
 
 // POST /api/payroll/runs

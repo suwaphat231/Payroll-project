@@ -3,9 +3,9 @@ package models
 import "time"
 
 type Payslip struct {
-	ID         uint      `gorm:"primaryKey" json:"id"`
-	RunID      uint      `gorm:"index" json:"runId"`
-	EmployeeID uint      `gorm:"index" json:"employeeId"`
+	ID         uint `gorm:"primaryKey" json:"id"`
+	RunID      uint `gorm:"index" json:"runId"`
+	EmployeeID uint `gorm:"index" json:"employeeId"`
 
 	// รายละเอียดเงินเดือน
 	BaseSalary float64 `json:"baseSalary"`

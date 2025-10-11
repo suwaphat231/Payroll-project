@@ -8,10 +8,8 @@ import (
 	"backend/internal/db"
 	"backend/internal/handlers"
 	"backend/internal/middleware"
-	"backend/internal/models"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 func main() {
@@ -24,7 +22,11 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err := migrate(gdb); err != nil {
+	if err := db.Migrate(gdb); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := db.Seed(gdb); err != nil {
 		log.Fatal(err)
 	}
 
@@ -74,16 +76,6 @@ func getenv(k, def string) string {
 		return v
 	}
 	return def
-}
-
-func migrate(db *gorm.DB) error {
-	return db.AutoMigrate(
-		&models.Employee{},
-		&models.Employment{},  // ถ้าไม่มี struct นี้ใน models ให้ลบบรรทัดนี้ออก
-		&models.PayrollRun{},
-		&models.PayrollItem{}, // ถ้าไม่มี struct นี้ใน models ให้ลบบรรทัดนี้ออก
-		&models.Leave{},
-	)
 }
 
 func enableCORS(r *gin.Engine) {
