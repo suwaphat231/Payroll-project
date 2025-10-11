@@ -1,19 +1,15 @@
-version: "3.9"
 services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: payroll
+      POSTGRES_USER: ${DB_USER:-payroll}
+      POSTGRES_PASSWORD: ${DB_PASS:-secret123}
+      POSTGRES_DB: ${DB_NAME:-payroll_db}
     ports:
-      - "5432:5432"   # ถ้า 5432 ชน ให้เปลี่ยนซ้ายเป็น 5433
+      - "${DB_PORT:-5432}:5432"
     volumes:
+      # รัน .sql ในครั้งแรกที่ data dir ว่าง
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
       - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d payroll"]
-      interval: 3s
-      timeout: 3s
-      retries: 20
 volumes:
   pgdata:
