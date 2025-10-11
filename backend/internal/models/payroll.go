@@ -2,7 +2,7 @@ package models
 
 import "time"
 
-// ✅ แก้ struct PayrollRun ให้ตรงกับ DDL ใน 001_init.sql
+// PayrollRun ตามตาราง payroll_runs
 type PayrollRun struct {
 	ID          uint          `gorm:"primaryKey;column:id" json:"id"`
 	PeriodYear  int           `gorm:"column:period_year;not null" json:"periodYear"`
@@ -14,18 +14,17 @@ type PayrollRun struct {
 
 func (PayrollRun) TableName() string { return "payroll_runs" }
 
-// ✅ PayrollItem ก็ใช้ต่อได้เหมือนเดิม
+// ⚠️ สำคัญ: ให้ตรงกับตาราง payslips
 type PayrollItem struct {
 	ID          uint      `gorm:"primaryKey;column:id" json:"id"`
 	RunID       uint      `gorm:"column:payroll_run_id;index;not null" json:"runId"`
 	EmployeeID  uint      `gorm:"column:employee_id;index;not null" json:"employeeId"`
-	Gross       float64   `gorm:"column:gross" json:"gross"`
-	TaxWithheld float64   `gorm:"column:tax_withheld" json:"taxWithheld"`
-	SSO         float64   `gorm:"column:sso" json:"sso"`
-	PVD         float64   `gorm:"column:pvd" json:"pvd"`
-	NetPay      float64   `gorm:"column:net_pay" json:"netPay"`
+	BaseSalary  float64   `gorm:"column:base_salary;not null" json:"baseSalary"`
+	TaxWithheld float64   `gorm:"column:tax_withheld;not null" json:"taxWithheld"`
+	SSO         float64   `gorm:"column:sso;not null" json:"sso"`
+	PVD         float64   `gorm:"column:pvd;not null" json:"pvd"`
+	NetPay      float64   `gorm:"column:net_pay;not null" json:"netPay"`
 	GeneratedAt time.Time `gorm:"column:generated_at;autoCreateTime" json:"generatedAt"`
-	Details     string    `gorm:"column:details" json:"details"`
 }
 
 func (PayrollItem) TableName() string { return "payslips" }

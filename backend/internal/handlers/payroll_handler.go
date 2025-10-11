@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,41 +12,22 @@ import (
 
 	"backend/internal/middleware"
 	"backend/internal/models"
-	"backend/internal/repository"
-	"backend/internal/services"
 	"backend/internal/storage"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 )
 
-// ✅ ใช้ storage.Port แทน *storage.Storage เพื่อให้รองรับทั้ง in-memory และ PostgreSQL
+// PayrollHandler จัดการ endpoint เกี่ยวกับการจ่ายเงินเดือน
 type PayrollHandler struct {
-	PRepo *repository.PayrollRepository
-	Svc   *services.PayrollService
 	Store storage.Port
 }
 
-// ✅ Constructor ปรับให้รับ storage.Port และคืน handler เดียวเท่านั้น
 func NewPayrollHandler(store storage.Port) *PayrollHandler {
-	var prepo *repository.PayrollRepository
-	var svc *services.PayrollService
-
-	// ถ้ามี repository layer ใช้กับ DB จริง ให้เชื่อมผ่าน repository
-	if repoBase, ok := store.(*storage.Storage); ok {
-		base := repository.New(repoBase)
-		prepo = repository.NewPayrollRepository(base)
-		svc = services.NewPayrollService(prepo)
-	}
-
-	return &PayrollHandler{
-		PRepo: prepo,
-		Svc:   svc,
-		Store: store,
-	}
+	return &PayrollHandler{Store: store}
 }
 
-// POST /api/auth/login
+// POST /api/v1/auth/login
 func (h *PayrollHandler) Login(c *gin.Context) {
 	var body struct {
 		Email    string `json:"email"`
@@ -80,10 +62,8 @@ func (h *PayrollHandler) Login(c *gin.Context) {
 	})
 }
 
-// POST /api/payroll/runs
-// body รองรับ:
-// {"year":2025,"month":9}
-// {"payDate":"2025-09"} หรือ "2025-09-30" หรือ RFC3339
+// POST /api/v1/payroll/runs
+// body: {"year":2025,"month":10} หรือ {"payDate":"2025-10"} / "2025-10-31"
 func (h *PayrollHandler) CreateRun(c *gin.Context) {
 	var body struct {
 		Year    int     `json:"year"`
@@ -95,7 +75,6 @@ func (h *PayrollHandler) CreateRun(c *gin.Context) {
 		return
 	}
 
-	// แปลง payDate -> year/month ถ้ายังไม่ระบุ
 	if (body.Year == 0 || body.Month == 0) && body.PayDate != nil && *body.PayDate != "" {
 		if t, err := time.Parse("2006-01-02", *body.PayDate); err == nil {
 			body.Year, body.Month = t.Year(), int(t.Month())
@@ -105,7 +84,6 @@ func (h *PayrollHandler) CreateRun(c *gin.Context) {
 			body.Year, body.Month = t3.Year(), int(t3.Month())
 		}
 	}
-
 	if body.Year <= 0 || body.Month < 1 || body.Month > 12 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "year/month is required and must be valid"})
 		return
@@ -116,35 +94,72 @@ func (h *PayrollHandler) CreateRun(c *gin.Context) {
 		PeriodMonth: body.Month,
 		Locked:      false,
 	}
-
-	// ✅ ใช้ Store โดยตรงแทน PRepo
 	if err := h.Store.CreatePayrollRun(&run); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "create run failed"})
 		return
 	}
-
 	c.JSON(http.StatusCreated, run)
 }
 
-// POST /api/payroll/runs/:id/calculate
+// POST /api/v1/payroll/runs/:id/calculate
 func (h *PayrollHandler) CalculateRun(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 
-	if h.Svc == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "payroll service unavailable"})
+	run, err := h.Store.GetPayrollRun(uint(id))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "run not found"})
 		return
 	}
 
-	count, err := h.Svc.CalculateRun(uint(id))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	if err := h.Store.ClearPayrollItems(run.ID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "clear items failed"})
 		return
+	}
+
+	ps, pe := monthStartEnd(run.PeriodYear, run.PeriodMonth)
+
+	emps, err := h.Store.ListActiveEmployees()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "list employees failed"})
+		return
+	}
+
+	count := 0
+	for _, e := range emps {
+		worked, total := overlapDays(e.HiredAt, e.TerminatedAt, ps, pe)
+		if total <= 0 || worked <= 0 {
+			continue
+		}
+
+		// เงินเดือนตามสัดส่วนวันทำงาน
+		gross := e.BaseSalary * (float64(worked) / float64(total))
+		tax := gross * 0.05 // ภาษีตัวอย่าง 5%
+		// ในขั้นนี้ยังไม่คิด SSO/PVD -> ใส่ 0 ไปก่อน
+		sso := 0.0
+		pvd := 0.0
+		net := gross - tax - sso - pvd
+
+		item := &models.PayrollItem{
+			RunID:       run.ID,
+			EmployeeID:  e.ID,
+			BaseSalary:  round2(gross), // ใส่ยอดหลัง prorate ลงคอลัมน์ base_salary
+			TaxWithheld: round2(tax),
+			SSO:         round2(sso),
+			PVD:         round2(pvd),
+			NetPay:      round2(net),
+			// GeneratedAt: autoCreateTime โดย GORM
+		}
+		if err := h.Store.SavePayrollItem(item); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "save item failed"})
+			return
+		}
+		count++
 	}
 
 	c.JSON(http.StatusOK, gin.H{"calculated": count})
 }
 
-// GET /api/payroll/runs/:id/items
+// GET /api/v1/payroll/runs/:id/items
 func (h *PayrollHandler) ListRunItems(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	items, err := h.Store.ListPayrollItems(uint(id))
@@ -155,7 +170,7 @@ func (h *PayrollHandler) ListRunItems(c *gin.Context) {
 	c.JSON(http.StatusOK, items)
 }
 
-// POST /api/payroll/runs/:id/export-bank-csv
+// POST /api/v1/payroll/runs/:id/export-bank-csv
 func (h *PayrollHandler) ExportBankCSV(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	items, err := h.Store.ListPayrollItems(uint(id))
@@ -183,4 +198,54 @@ func (h *PayrollHandler) ExportBankCSV(c *gin.Context) {
 	c.Header("Content-Type", "text/csv")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=payroll%d.csv", id))
 	c.String(http.StatusOK, buf.String())
+}
+
+// ------------------ helpers ------------------
+
+// monthStartEnd คืนวันที่เริ่มและสิ้นสุดของเดือนนั้น ๆ
+func monthStartEnd(year, month int) (time.Time, time.Time) {
+	loc := time.UTC
+	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, loc)
+	end := start.AddDate(0, 1, -1)
+	return start, end
+}
+
+// overlapDays: คำนวณจำนวนวันทำงานที่ซ้อนกับช่วง ps..pe (นับแบบรวมปลายทั้งสองด้าน)
+func overlapDays(hire time.Time, end *time.Time, ps, pe time.Time) (worked, total int) {
+	total = int(pe.Sub(ps).Hours()/24) + 1
+	if total < 0 {
+		total = 0
+	}
+
+	start := maxTime(ps, hire)
+	var last time.Time
+	if end != nil {
+		if end.Before(ps) {
+			return 0, total
+		}
+		if end.Before(pe) {
+			last = *end
+		} else {
+			last = pe
+		}
+	} else {
+		last = pe
+	}
+
+	w := int(last.Sub(start).Hours()/24) + 1
+	if w < 0 {
+		w = 0
+	}
+	return w, total
+}
+
+func maxTime(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
+}
+
+func round2(n float64) float64 {
+	return math.Round(n*100) / 100
 }

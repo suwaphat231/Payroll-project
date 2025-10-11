@@ -5,7 +5,6 @@ import (
 	"backend/internal/repository"
 	"errors"
 	"math"
-	"strconv"
 	"time"
 )
 
@@ -42,7 +41,7 @@ func (s *PayrollService) CalculateRun(runID uint) (int, error) {
 
 	count := 0
 	for _, e := range emps {
-		// ใช้โครงสร้างใหม่: ข้อมูลอยู่บน employees โดยตรง
+		// ข้อมูลอยู่บน employees โดยตรง
 		hire := e.HiredAt
 		var end *time.Time = e.TerminatedAt
 
@@ -51,7 +50,7 @@ func (s *PayrollService) CalculateRun(runID uint) (int, error) {
 			continue
 		}
 
-		// เงินเดือนตามสัดส่วนวันทำงาน
+		// เงินเดือนตามสัดส่วนวันทำงาน (prorate)
 		gross := e.BaseSalary * (float64(worked) / float64(total))
 
 		// ใช้อัตราภาษีรายบุคคล ถ้าไม่มีให้ fallback เป็น 5%
@@ -60,15 +59,22 @@ func (s *PayrollService) CalculateRun(runID uint) (int, error) {
 			rate = 0.05
 		}
 		tax := gross * rate
-		net := gross - tax
+
+		// ตอนนี้ยังไม่คิด SSO และ PVD -> ใส่ 0 ไว้ก่อน
+		sso := 0.0
+		pvd := 0.0
+
+		net := gross - tax - sso - pvd
 
 		item := &models.PayrollItem{
 			RunID:       run.ID,
 			EmployeeID:  e.ID,
-			Gross:       round2(gross),
+			BaseSalary:  round2(gross), // ใส่ยอดหลัง prorate ลง base_salary
 			TaxWithheld: round2(tax),
+			SSO:         round2(sso),
+			PVD:         round2(pvd),
 			NetPay:      round2(net),
-			Details:     "base prorated; tax " + pctText(rate),
+			// GeneratedAt: ใช้ autoCreateTime ของ GORM
 		}
 
 		if err := s.Repo.SaveItem(item); err != nil {
@@ -91,9 +97,8 @@ func monthStartEnd(year, month int) (time.Time, time.Time, error) {
 	return start, end, nil
 }
 
-// overlapDays คำนวณจำนวนวันทำงานที่ซ้อนกับ period
+// overlapDays คำนวณจำนวนวันทำงานที่ซ้อนกับ period (inclusive)
 func overlapDays(hire time.Time, end *time.Time, ps, pe time.Time) (worked, total int) {
-	// รวมปลายทาง 1 วัน (inclusive)
 	total = int(pe.Sub(ps).Hours()/24) + 1
 	if total < 0 {
 		total = 0
@@ -133,15 +138,4 @@ func minTime(a, b time.Time) time.Time {
 
 func round2(n float64) float64 {
 	return math.Round(n*100) / 100
-}
-
-func pctText(r float64) string {
-	// แปลง 0.05 -> "5%"
-	return trimTrailingZeros(round2(r * 100))
-}
-
-func trimTrailingZeros(f float64) string {
-	// 5 -> "5", 5.5 -> "5.5"
-	s := strconv.FormatFloat(f, 'f', -1, 64)
-	return s + "%"
 }
