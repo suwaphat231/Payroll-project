@@ -5,80 +5,58 @@ import (
 	"net/http"
 	"os"
 
+	appdb "backend/internal/db"
 	"backend/internal/handlers"
 	"backend/internal/middleware"
 	"backend/internal/storage"
+	pgstore "backend/internal/storage/pg"
 
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
-	// อ่านค่า environment variable หรือใช้ค่า default
 	port := getenv("PORT", "3000")
 	jwtSecret := getenv("JWT_SECRET", "dev_secret")
 
-	log.Printf("🚀 Starting Payroll Backend on port %s", port)
+	// เลือก storage ตาม ENV
+	var store storage.Port
+	if os.Getenv("USE_DATABASE") == "1" {
+		conn, err := appdb.NewGorm()
+		if err != nil {
+			log.Fatalf("db connect failed: %v", err)
+		}
+		log.Println("💾 Using PostgreSQL storage")
+		store = pgstore.New(conn)
+	} else {
+		log.Println("💾 Using in-memory storage")
+		store = storage.New() // in-memory implementation ที่คุณมีอยู่แล้ว
+	}
 
-	// ใช้ in-memory store (ตอนนี้ยังไม่ได้เชื่อม DB จริง)
-	store := storage.New()
-
-	// ตั้งค่า JWT secret ให้ middleware
+	// JWT secret
 	middleware.SetJWTSecret(jwtSecret)
 
-	// สร้าง Gin router
+	// Gin engine + CORS
 	r := gin.Default()
 	enableCORS(r)
 
-	// Health check
+	// Health
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 	})
 
-	// ✅ Register routes ทั้งหมด
-	registerRoutes(r, store)
-
-	log.Printf("✅ Server ready at http://localhost:%s", port)
-	if err := r.Run(":" + port); err != nil {
-		log.Fatal(err)
-	}
-}
-
-// ฟังก์ชันช่วยอ่านค่า env
-func getenv(k, def string) string {
-	if v := os.Getenv(k); v != "" {
-		return v
-	}
-	return def
-}
-
-// เปิด CORS (อนุญาตให้ frontend เข้ามาเรียก API ได้)
-func enableCORS(r *gin.Engine) {
-	r.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")
-		if c.Request.Method == http.MethodOptions {
-			c.AbortWithStatus(http.StatusNoContent)
-			return
-		}
-		c.Next()
-	})
-}
-
-// ✅ ตรงนี้คือส่วนที่แก้: registerRoutes เป็น /api/v1 แทน /api
-func registerRoutes(r *gin.Engine, store *storage.Storage) {
+	// Handlers (ทุกตัวรับ storage.Port)
 	empH := handlers.NewEmployeeHandler(store)
 	payH := handlers.NewPayrollHandler(store)
 	psH := handlers.NewPayslipHandler(store)
 	lvH := handlers.NewLeaveHandler(store)
 
-	// เปลี่ยนเป็น /api/v1
+	// Routes
 	api := r.Group("/api/v1")
 	{
-		// public route
+		// public
 		api.POST("/auth/login", payH.Login)
 
-		// secured group (ยกเว้นถ้า NO_AUTH=1)
+		// secured
 		secured := api.Group("/")
 		if os.Getenv("NO_AUTH") != "1" {
 			secured.Use(middleware.AuthRequired())
@@ -101,4 +79,29 @@ func registerRoutes(r *gin.Engine, store *storage.Storage) {
 		secured.GET("/leave", lvH.List)
 		secured.POST("/leave", lvH.Create)
 	}
+
+	log.Printf("✅ Server ready at http://localhost:%s", port)
+	if err := r.Run(":" + port); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func getenv(k, def string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
+	}
+	return def
+}
+
+func enableCORS(r *gin.Engine) {
+	r.Use(func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
+	})
 }

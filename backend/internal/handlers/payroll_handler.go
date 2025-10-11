@@ -19,17 +19,29 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// ✅ ใช้ storage.Port แทน *storage.Storage เพื่อให้รองรับทั้ง in-memory และ PostgreSQL
 type PayrollHandler struct {
 	PRepo *repository.PayrollRepository
 	Svc   *services.PayrollService
+	Store storage.Port
 }
 
-func NewPayrollHandler(store *storage.Storage) *PayrollHandler {
-	base := repository.New(store)
-	prepo := repository.NewPayrollRepository(base)
+// ✅ Constructor ปรับให้รับ storage.Port และคืน handler เดียวเท่านั้น
+func NewPayrollHandler(store storage.Port) *PayrollHandler {
+	var prepo *repository.PayrollRepository
+	var svc *services.PayrollService
+
+	// ถ้ามี repository layer ใช้กับ DB จริง ให้เชื่อมผ่าน repository
+	if repoBase, ok := store.(*storage.Storage); ok {
+		base := repository.New(repoBase)
+		prepo = repository.NewPayrollRepository(base)
+		svc = services.NewPayrollService(prepo)
+	}
+
 	return &PayrollHandler{
 		PRepo: prepo,
-		Svc:   services.NewPayrollService(prepo),
+		Svc:   svc,
+		Store: store,
 	}
 }
 
@@ -69,9 +81,9 @@ func (h *PayrollHandler) Login(c *gin.Context) {
 }
 
 // POST /api/payroll/runs
-// body รองรับ 2 แบบ:
-// 1) {"year":2025,"month":9}
-// 2) {"payDate":"2025-09"} หรือ "2025-09-30" หรือ RFC3339
+// body รองรับ:
+// {"year":2025,"month":9}
+// {"payDate":"2025-09"} หรือ "2025-09-30" หรือ RFC3339
 func (h *PayrollHandler) CreateRun(c *gin.Context) {
 	var body struct {
 		Year    int     `json:"year"`
@@ -86,14 +98,11 @@ func (h *PayrollHandler) CreateRun(c *gin.Context) {
 	// แปลง payDate -> year/month ถ้ายังไม่ระบุ
 	if (body.Year == 0 || body.Month == 0) && body.PayDate != nil && *body.PayDate != "" {
 		if t, err := time.Parse("2006-01-02", *body.PayDate); err == nil {
-			body.Year = t.Year()
-			body.Month = int(t.Month())
+			body.Year, body.Month = t.Year(), int(t.Month())
 		} else if t2, err2 := time.Parse("2006-01", *body.PayDate); err2 == nil {
-			body.Year = t2.Year()
-			body.Month = int(t2.Month())
+			body.Year, body.Month = t2.Year(), int(t2.Month())
 		} else if t3, err3 := time.Parse(time.RFC3339, *body.PayDate); err3 == nil {
-			body.Year = t3.Year()
-			body.Month = int(t3.Month())
+			body.Year, body.Month = t3.Year(), int(t3.Month())
 		}
 	}
 
@@ -108,28 +117,37 @@ func (h *PayrollHandler) CreateRun(c *gin.Context) {
 		Locked:      false,
 	}
 
-	if err := h.PRepo.CreateRun(&run); err != nil {
+	// ✅ ใช้ Store โดยตรงแทน PRepo
+	if err := h.Store.CreatePayrollRun(&run); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "create run failed"})
 		return
 	}
+
 	c.JSON(http.StatusCreated, run)
 }
 
 // POST /api/payroll/runs/:id/calculate
 func (h *PayrollHandler) CalculateRun(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
+
+	if h.Svc == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "payroll service unavailable"})
+		return
+	}
+
 	count, err := h.Svc.CalculateRun(uint(id))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
 	c.JSON(http.StatusOK, gin.H{"calculated": count})
 }
 
 // GET /api/payroll/runs/:id/items
 func (h *PayrollHandler) ListRunItems(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	items, err := h.PRepo.ListItems(uint(id))
+	items, err := h.Store.ListPayrollItems(uint(id))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "storage error"})
 		return
@@ -140,7 +158,7 @@ func (h *PayrollHandler) ListRunItems(c *gin.Context) {
 // POST /api/payroll/runs/:id/export-bank-csv
 func (h *PayrollHandler) ExportBankCSV(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	items, err := h.PRepo.ListItems(uint(id))
+	items, err := h.Store.ListPayrollItems(uint(id))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "storage error"})
 		return

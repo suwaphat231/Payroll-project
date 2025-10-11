@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"net/http"
-	"time"
 
 	"backend/internal/models"
 	"backend/internal/storage"
@@ -11,52 +10,33 @@ import (
 )
 
 type LeaveHandler struct {
-	Store *storage.Storage
+	Store storage.Port
 }
 
-func NewLeaveHandler(store *storage.Storage) *LeaveHandler {
+func NewLeaveHandler(store storage.Port) *LeaveHandler {
 	return &LeaveHandler{Store: store}
 }
 
+// GET /api/v1/leave
 func (h *LeaveHandler) List(c *gin.Context) {
-	leaves, err := h.Store.ListLeaves()
+	out, err := h.Store.ListLeaves()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "storage error"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": leaves})
+	c.JSON(http.StatusOK, out)
 }
 
+// POST /api/v1/leave
 func (h *LeaveHandler) Create(c *gin.Context) {
-	var body struct {
-		EmployeeID uint   `json:"employeeId"`
-		StartDate  string `json:"startDate"`
-		EndDate    string `json:"endDate"`
-		Reason     string `json:"reason"`
-	}
-	if err := c.ShouldBindJSON(&body); err != nil || body.EmployeeID == 0 || body.StartDate == "" || body.EndDate == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
+	var lv models.Leave
+	if err := c.ShouldBindJSON(&lv); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
 		return
 	}
-
-	start, err1 := time.Parse(time.RFC3339, body.StartDate)
-	end, err2 := time.Parse(time.RFC3339, body.EndDate)
-	if err1 != nil || err2 != nil || end.Before(start) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid dates"})
+	if err := h.Store.CreateLeave(&lv); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "storage error"})
 		return
 	}
-
-	leave := models.Leave{
-		EmployeeID: body.EmployeeID,
-		StartDate:  start,
-		EndDate:    end,
-		Reason:     body.Reason,
-	}
-
-	if err := h.Store.CreateLeave(&leave); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "create failed"})
-		return
-	}
-
-	c.JSON(http.StatusCreated, gin.H{"data": leave})
+	c.JSON(http.StatusCreated, lv)
 }
