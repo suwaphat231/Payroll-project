@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/csv"
 	"fmt"
-	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,6 +11,7 @@ import (
 
 	"backend/internal/middleware"
 	"backend/internal/models"
+	"backend/internal/payrollcalc"
 	"backend/internal/storage"
 
 	"github.com/gin-gonic/gin"
@@ -116,7 +116,11 @@ func (h *PayrollHandler) CalculateRun(c *gin.Context) {
 		return
 	}
 
-	ps, pe := monthStartEnd(run.PeriodYear, run.PeriodMonth)
+	ps, pe, err := payrollcalc.MonthStartEnd(run.PeriodYear, run.PeriodMonth)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "invalid payroll period"})
+		return
+	}
 
 	emps, err := h.Store.ListActiveEmployees()
 	if err != nil {
@@ -126,7 +130,7 @@ func (h *PayrollHandler) CalculateRun(c *gin.Context) {
 
 	count := 0
 	for _, e := range emps {
-		worked, total := overlapDays(e.HiredAt, e.TerminatedAt, ps, pe)
+		worked, total := payrollcalc.OverlapDays(e.HiredAt, e.TerminatedAt, ps, pe)
 		if total <= 0 || worked <= 0 {
 			continue
 		}
@@ -142,11 +146,11 @@ func (h *PayrollHandler) CalculateRun(c *gin.Context) {
 		item := &models.PayrollItem{
 			RunID:       run.ID,
 			EmployeeID:  e.ID,
-			BaseSalary:  round2(gross), // ใส่ยอดหลัง prorate ลงคอลัมน์ base_salary
-			TaxWithheld: round2(tax),
-			SSO:         round2(sso),
-			PVD:         round2(pvd),
-			NetPay:      round2(net),
+			BaseSalary:  payrollcalc.Round2(gross), // ใส่ยอดหลัง prorate ลงคอลัมน์ base_salary
+			TaxWithheld: payrollcalc.Round2(tax),
+			SSO:         payrollcalc.Round2(sso),
+			PVD:         payrollcalc.Round2(pvd),
+			NetPay:      payrollcalc.Round2(net),
 			// GeneratedAt: autoCreateTime โดย GORM
 		}
 		if err := h.Store.SavePayrollItem(item); err != nil {
@@ -227,14 +231,17 @@ func (h *PayrollHandler) calculateRunItems(run *models.PayrollRun) error {
 		return err
 	}
 
-	ps, pe := monthStartEnd(run.PeriodYear, run.PeriodMonth)
+	ps, pe, err := payrollcalc.MonthStartEnd(run.PeriodYear, run.PeriodMonth)
+	if err != nil {
+		return err
+	}
 	emps, err := h.Store.ListActiveEmployees()
 	if err != nil {
 		return err
 	}
 
 	for _, e := range emps {
-		worked, total := overlapDays(e.HiredAt, e.TerminatedAt, ps, pe)
+		worked, total := payrollcalc.OverlapDays(e.HiredAt, e.TerminatedAt, ps, pe)
 		if total <= 0 || worked <= 0 {
 			continue
 		}
@@ -248,11 +255,11 @@ func (h *PayrollHandler) calculateRunItems(run *models.PayrollRun) error {
 		item := &models.PayrollItem{
 			RunID:       run.ID,
 			EmployeeID:  e.ID,
-			BaseSalary:  round2(gross),
-			TaxWithheld: round2(tax),
-			SSO:         round2(sso),
-			PVD:         round2(pvd),
-			NetPay:      round2(net),
+			BaseSalary:  payrollcalc.Round2(gross),
+			TaxWithheld: payrollcalc.Round2(tax),
+			SSO:         payrollcalc.Round2(sso),
+			PVD:         payrollcalc.Round2(pvd),
+			NetPay:      payrollcalc.Round2(net),
 		}
 		if err := h.Store.SavePayrollItem(item); err != nil {
 			return err
@@ -292,51 +299,3 @@ func (h *PayrollHandler) ExportBankCSV(c *gin.Context) {
 }
 
 // ------------------ helpers ------------------
-
-// monthStartEnd คืนวันที่เริ่มและสิ้นสุดของเดือนนั้น ๆ
-func monthStartEnd(year, month int) (time.Time, time.Time) {
-	loc := time.UTC
-	start := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, loc)
-	end := start.AddDate(0, 1, -1)
-	return start, end
-}
-
-// overlapDays: คำนวณจำนวนวันทำงานที่ซ้อนกับช่วง ps..pe (นับแบบรวมปลายทั้งสองด้าน)
-func overlapDays(hire time.Time, end *time.Time, ps, pe time.Time) (worked, total int) {
-	total = int(pe.Sub(ps).Hours()/24) + 1
-	if total < 0 {
-		total = 0
-	}
-
-	start := maxTime(ps, hire)
-	var last time.Time
-	if end != nil {
-		if end.Before(ps) {
-			return 0, total
-		}
-		if end.Before(pe) {
-			last = *end
-		} else {
-			last = pe
-		}
-	} else {
-		last = pe
-	}
-
-	w := int(last.Sub(start).Hours()/24) + 1
-	if w < 0 {
-		w = 0
-	}
-	return w, total
-}
-
-func maxTime(a, b time.Time) time.Time {
-	if a.After(b) {
-		return a
-	}
-	return b
-}
-
-func round2(n float64) float64 {
-	return math.Round(n*100) / 100
-}
