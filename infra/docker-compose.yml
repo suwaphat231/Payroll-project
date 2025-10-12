@@ -1,0 +1,75 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:16
+    container_name: payroll-db
+    environment:
+      POSTGRES_USER: payroll_user
+      POSTGRES_PASSWORD: payroll_pass
+      POSTGRES_DB: payroll
+    ports:
+      - "5432:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+      - ../db/migrations:/docker-entrypoint-initdb.d:ro  # รัน 001_init.sql, 002_seed_data.sql อัตโนมัติ
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payroll_user -d payroll"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: payroll-backend
+    environment:
+      PORT: 3000
+      USE_DATABASE: 1
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: payroll_user
+      DB_PASS: payroll_pass
+      DB_NAME: payroll
+      DB_SSLMODE: disable
+      JWT_SECRET: your-super-secret-jwt-key-change-this-in-production
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_API_URL: http://localhost:3000/api/v1
+    container_name: payroll-frontend
+    environment:
+      REACT_APP_API_URL: http://localhost:3000/api/v1
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: payroll-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_MAIL_DEBUG: 'False'
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: 'False'
+    ports:
+      - "8080:80"
+    depends_on:
+      - db
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+volumes:
+  dbdata:
+  pgadmin_data:
