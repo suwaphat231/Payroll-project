@@ -13,20 +13,41 @@ function clamp(n, min, max) {
   return Math.max(min, Math.min(max, n));
 }
 
+function round2(n) {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
 function computeRow(row, rates) {
-  // row จาก backend จะมี: baseSalary, taxWithheld, sso, pvd, netPay, employee
+  const employee = row.employee || {};
+  const gross = row.baseSalary ?? employee.baseSalary ?? 0;
+
+  const ssoEnabled = employee.ssoEnabled ?? true;
+  const ssoRate = rates.ssoRate ?? 0;
+  const ssoCap = rates.ssoCap ?? Infinity;
+  const computedSso = ssoEnabled ? Math.min(gross * ssoRate, ssoCap) : 0;
+
+  const pvdRate = employee.pvdRate ?? 0;
+  const computedPvd = gross * pvdRate;
+
+  const defaultTaxRate = rates.taxRate ?? 0;
+  const withholdingRate = employee.withholdingRate ?? defaultTaxRate;
+  const taxableBase = gross - computedSso - computedPvd;
+  const computedTax = Math.max(taxableBase * withholdingRate, 0);
+
+  const net = gross - computedTax - computedSso - computedPvd;
+
   return {
     id: row.id,
     employeeId: row.employeeId,
-    empCode: row.employee?.empCode || "",
-    name: row.employee ? `${row.employee.firstName} ${row.employee.lastName}` : "",
-    department: row.employee?.department || "",
-    position: row.employee?.position || "",
-    gross: row.baseSalary || 0,
-    tax: row.taxWithheld || 0,
-    sso: row.sso || 0,
-    pvd: row.pvd || 0,
-    net: row.netPay || 0,
+    empCode: employee.empCode || "",
+    name: employee.firstName ? `${employee.firstName} ${employee.lastName || ""}`.trim() : "",
+    department: employee.department || "",
+    position: employee.position || "",
+    gross: round2(gross),
+    tax: round2(computedTax),
+    sso: round2(computedSso),
+    pvd: round2(computedPvd),
+    net: round2(net),
     status: row.status || "Draft",
   };
 }
