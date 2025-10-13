@@ -1,0 +1,257 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useParams, useLocation, useNavigate } from "react-router-dom";
+import { apiGet } from "../services/api";
+
+function thb(n) {
+  return new Intl.NumberFormat("th-TH", { style: "currency", currency: "THB" }).format(n || 0);
+}
+
+export default function PayslipViewPage() {
+  const { runId, employeeId } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const ref = useRef(null);
+
+  const [data, setData] = useState(location.state?.payslip || null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    // If we don't have data from navigation state, fetch it
+    if (!data && runId && employeeId) {
+      loadPayslip();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runId, employeeId]);
+
+  async function loadPayslip() {
+    try {
+      setLoading(true);
+      setError("");
+      const payslip = await apiGet(`/payslips/${runId}/${employeeId}`, { auth: true });
+      setData(payslip);
+    } catch (err) {
+      console.error("Failed to load payslip:", err);
+      setError("ไม่สามารถโหลดข้อมูล payslip ได้");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const totals = useMemo(() => {
+    const earn = (data?.earnings || []).reduce((s, x) => s + (Number(x.amount) || 0), 0);
+    const ded = (data?.deductions || []).reduce((s, x) => s + (Number(x.amount) || 0), 0);
+    return { earn, ded, net: earn - ded };
+  }, [data]);
+
+  function handlePrint() {
+    const originalTitle = document.title;
+    document.title = `Payslip_${data?.employee?.code || "EMP"}_${data?.period?.end || ""}`;
+    window.print();
+    document.title = originalTitle;
+  }
+
+  const periodStr = useMemo(() => {
+    if (!data?.period) return "-";
+    const fmt = (d) => new Date(d).toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "2-digit" });
+    return `${fmt(data.period.start)} – ${fmt(data.period.end)}`;
+  }, [data]);
+
+  const payDateStr = useMemo(() => {
+    if (!data?.period?.payDate) return "-";
+    return new Date(data.period.payDate).toLocaleDateString("th-TH", { year: "numeric", month: "short", day: "2-digit" });
+  }, [data]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 md:p-8 flex items-center justify-center">
+        <div className="text-white text-xl">กำลังโหลด...</div>
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 md:p-8">
+        <div className="mx-auto max-w-4xl">
+          <div className="rounded-xl bg-red-900/50 border border-red-700 p-4 text-red-200">
+            {error || "ไม่พบข้อมูล payslip"}
+          </div>
+          <button
+            onClick={() => navigate("/payslips")}
+            className="mt-4 rounded-xl bg-slate-700 px-4 py-2 text-white hover:bg-slate-600"
+          >
+            กลับ
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 md:p-8">
+      <div className="mx-auto max-w-4xl space-y-4">
+        {/* Controls */}
+        <div className="print:hidden flex items-center justify-between">
+          <button
+            onClick={() => navigate("/payslips")}
+            className="rounded-xl bg-slate-700 px-4 py-2 text-white hover:bg-slate-600"
+          >
+            ← กลับ
+          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handlePrint}
+              className="rounded-xl bg-indigo-600 px-4 py-2 text-white shadow-lg hover:bg-indigo-700"
+            >
+              ดาวน์โหลด PDF / พิมพ์
+            </button>
+          </div>
+        </div>
+
+        {/* Payslip card */}
+        <div ref={ref} className="rounded-2xl bg-slate-800/50 p-6 shadow-xl ring-1 ring-slate-700 print:shadow-none print:bg-white">
+          {/* Header */}
+          <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <div className="text-lg font-semibold text-white print:text-black">{data?.company?.name || "ชื่อบริษัท"}</div>
+              <div className="text-sm text-slate-400 whitespace-pre-wrap print:text-slate-600">{data?.company?.address || "ที่อยู่บริษัท"}</div>
+              {data?.company?.taxId && (
+                <div className="text-sm text-slate-400 print:text-slate-600">เลขผู้เสียภาษี: {data.company.taxId}</div>
+              )}
+            </div>
+            <div className="md:text-right">
+              <div className="text-sm text-slate-400 print:text-slate-500">งวดเงินเดือน</div>
+              <div className="font-medium text-white print:text-black">{periodStr}</div>
+              <div className="text-sm text-slate-400 print:text-slate-500">วันที่จ่าย</div>
+              <div className="font-medium text-white print:text-black">{payDateStr}</div>
+            </div>
+          </div>
+
+          {/* Employee section */}
+          <div className="mb-6 grid grid-cols-1 gap-4 rounded-2xl bg-slate-700/50 p-4 md:grid-cols-3 print:bg-slate-50">
+            <div>
+              <div className="text-xs text-slate-400 print:text-slate-500">รหัสพนักงาน</div>
+              <div className="font-medium text-white print:text-black">{data?.employee?.code || "-"}</div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-400 print:text-slate-500">ชื่อพนักงาน</div>
+              <div className="font-medium text-white print:text-black">{data?.employee?.name || "-"}</div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-400 print:text-slate-500">ตำแหน่ง / แผนก</div>
+              <div className="font-medium text-white print:text-black">{data?.employee?.position || "-"} {data?.employee?.department ? `• ${data.employee.department}` : ""}</div>
+            </div>
+            {data?.employee?.bank && data.employee.bank.account && (
+              <div className="md:col-span-3">
+                <div className="text-xs text-slate-400 print:text-slate-500">บัญชีรับเงินเดือน</div>
+                <div className="font-medium text-white print:text-black">{data.employee.bank.name || "Bank"} • {data.employee.bank.account}</div>
+              </div>
+            )}
+          </div>
+
+          {/* Earnings & Deductions */}
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <div>
+              <div className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400 print:text-slate-600">รายรับ (Earnings)</div>
+              <div className="overflow-hidden rounded-xl border border-slate-600 print:border-slate-200">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-700/50 print:bg-slate-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium text-slate-300 print:text-black">รายการ</th>
+                      <th className="px-3 py-2 text-right font-medium text-slate-300 print:text-black">จำนวน</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data?.earnings?.length ? data.earnings : [{ name: "Base Salary", amount: 0 }]).map((it, i) => (
+                      <tr key={i} className="odd:bg-slate-800/30 even:bg-slate-700/50 print:odd:bg-white print:even:bg-slate-50/50">
+                        <td className="px-3 py-2 text-slate-200 print:text-black">{it.name}</td>
+                        <td className="px-3 py-2 text-right text-slate-200 print:text-black">{thb(Number(it.amount) || 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-900/50 print:bg-slate-100">
+                      <td className="px-3 py-2 font-semibold text-white print:text-black">รวมรายรับ</td>
+                      <td className="px-3 py-2 text-right font-semibold text-white print:text-black">{thb(totals.earn)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400 print:text-slate-600">รายหัก (Deductions)</div>
+              <div className="overflow-hidden rounded-xl border border-slate-600 print:border-slate-200">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-700/50 print:bg-slate-50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium text-slate-300 print:text-black">รายการ</th>
+                      <th className="px-3 py-2 text-right font-medium text-slate-300 print:text-black">จำนวน</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data?.deductions?.length ? data.deductions : [{ name: "Tax", amount: 0 }]).map((it, i) => (
+                      <tr key={i} className="odd:bg-slate-800/30 even:bg-slate-700/50 print:odd:bg-white print:even:bg-slate-50/50">
+                        <td className="px-3 py-2 text-slate-200 print:text-black">{it.name}</td>
+                        <td className="px-3 py-2 text-right text-slate-200 print:text-black">{thb(Number(it.amount) || 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-900/50 print:bg-slate-100">
+                      <td className="px-3 py-2 font-semibold text-white print:text-black">รวมรายหัก</td>
+                      <td className="px-3 py-2 text-right font-semibold text-white print:text-black">{thb(totals.ded)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          {/* Net pay */}
+          <div className="mt-6 grid grid-cols-1 items-start gap-4 md:grid-cols-3">
+            <div className="md:col-span-2 rounded-2xl bg-emerald-900/30 p-4 ring-1 ring-emerald-600 print:bg-emerald-50 print:ring-emerald-200">
+              <div className="text-sm text-emerald-400 print:text-emerald-700">เงินได้สุทธิ (Net Pay)</div>
+              <div className="text-3xl font-bold text-emerald-300 print:text-emerald-900">{thb(totals.net)}</div>
+            </div>
+
+            <div className="rounded-2xl bg-slate-700/50 p-4 ring-1 ring-slate-600 print:bg-slate-50 print:ring-slate-200">
+              <div className="text-sm text-slate-400 print:text-slate-500">รวมปีนี้ (YTD)</div>
+              <div className="mt-1 text-sm text-slate-300 print:text-black">รายรับ: <span className="font-medium">{thb(data?.ytd?.earnings || 0)}</span></div>
+              <div className="text-sm text-slate-300 print:text-black">รายหัก: <span className="font-medium">{thb(data?.ytd?.deductions || 0)}</span></div>
+            </div>
+          </div>
+
+          {/* Notes */}
+          {data?.notes && (
+            <div className="mt-6 rounded-2xl border border-dashed border-slate-600 p-4 text-sm text-slate-300 print:border-slate-300 print:text-slate-700">
+              <div className="mb-1 font-medium text-white print:text-black">หมายเหตุ</div>
+              <div className="whitespace-pre-wrap">{data.notes}</div>
+            </div>
+          )}
+
+          {/* Footer */}
+          <div className="mt-8 grid grid-cols-2 gap-6 text-xs text-slate-500 print:text-slate-500">
+            <div>
+              ออกโดยระบบ Payroll • เอกสารสำหรับพนักงาน
+            </div>
+            <div className="text-right">
+              พิมพ์เมื่อ {new Date().toLocaleString("th-TH")}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Print styles */}
+      <style>{`
+        @media print {
+          body { background: white; }
+          .print\\:hidden { display: none !important; }
+          .ring-1, .shadow, .shadow-lg { box-shadow: none !important; }
+          @page { margin: 12mm; }
+        }
+      `}</style>
+    </div>
+  );
+}

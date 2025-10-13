@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir)",
+      "Bash(dir backend)",
+      "Bash(go:*)",
+      "Bash(timeout:*)",
+      "Bash(set PORT=3000)",
+      "Bash(set USE_DATABASE=1)",
+      "Bash(set DB_HOST=localhost)",
+      "Bash(set DB_PORT=5432)",
+      "Bash(set DB_USER=payroll_user)",
+      "Bash(set DB_PASS=payroll_pass)",
+      "Bash(set DB_NAME=payroll)",
+      "Bash(set DB_SSLMODE=disable)",
+      "Bash(set JWT_SECRET=your-super-secret-jwt-key-change-this-in-production)",
+      "Bash(docker start:*)",
+      "Bash(docker logs:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(netsh interface ipv4 show excludedportrange protocol=tcp:*)",
+      "Bash(docker compose:*)",
+      "Bash(curl:*)",
+      "Bash(docker exec:*)",
+      "Bash(start.bat)",
+      "Bash(USE_DATABASE=1 DB_HOST=localhost DB_PORT=5432 DB_USER=payroll_user DB_PASS=payroll_pass DB_NAME=payroll DB_SSLMODE=disable JWT_SECRET=your-super-secret-jwt-key-change-this-in-production PORT=3000 go run:*)",
+      "Bash(npm run dev)",
+      "Bash(npm run:*)",
+      "Bash(taskkill:*)",
+      "Bash(npm start)",
+      "Bash(npm install)",
+      "Bash(PORT=5173 npm start:*)",
+      "Bash(dir:*)",
+      "Bash(set USE_DATABASE=0)",
+      "Bash(set PORT=5173)",
+      "Bash(set PORT=3001)",
+      "Bash(start-backend.bat)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
